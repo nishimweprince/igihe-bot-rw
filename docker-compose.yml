@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: igihe
+      POSTGRES_PASSWORD: igihe
+      POSTGRES_DB: assistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    profiles: ["live"]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    profiles: ["live"]
+
+  # Local fixture-mode API (no live DB/model required):
+  #   uv sync && uv run uvicorn apps.api.main:app --port 8000
+  # Live profile (requires Postgres + Ollama):
+  #   BACKEND=postgres OLLAMA_MODEL=<pinned-digest> docker compose --profile live up
+
+volumes:
+  pgdata:
+  ollama:

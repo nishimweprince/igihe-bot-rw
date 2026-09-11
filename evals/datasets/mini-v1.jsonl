@@ -1,0 +1,8 @@
+{"acceptable": [101, 109], "answerable": true, "kind": "factual", "qid": "q01", "question": "Ni izihe nkuru IGIHE yanditse ku mazi i Kigali?"}
+{"acceptable": [102], "answerable": true, "kind": "name", "qid": "q02", "question": "APR yatsinze Rayon Sports gute?"}
+{"acceptable": [107], "answerable": true, "filters": {"published_after": "2024-09-01"}, "kind": "date", "qid": "q03", "question": "Umusaruro w'ikawa mu 2024 wari ungana iki?"}
+{"acceptable": [101, 107], "answerable": true, "kind": "multi", "qid": "q04", "question": "Ni ibihe bikorwa byitezwe i Kigali no mu buhinzi?"}
+{"acceptable": [], "answerable": false, "kind": "unanswerable", "qid": "q05", "question": "Ni iki cyabaye ku mubumbe Mars ejo?"}
+{"acceptable": [108], "answerable": true, "kind": "mixed", "qid": "q06", "question": "RRA yavuze iki kuri GDP?"}
+{"acceptable": [103], "answerable": true, "kind": "factual", "qid": "q07", "question": "Ibirori by'umuganura byagenze gute mu mafoto?"}
+{"acceptable": [105], "answerable": true, "kind": "factual", "qid": "q08", "question": "Inama y'abaminisitiri izaterana ryari?"}

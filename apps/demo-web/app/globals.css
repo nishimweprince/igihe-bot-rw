@@ -1,0 +1,66 @@
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  background: #fff;
+  color: #1a1a1a;
+}
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+h1 {
+  font-size: 1.4rem;
+}
+.hint {
+  color: #555;
+  font-size: 0.9rem;
+}
+form.row {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+button {
+  padding: 10px 16px;
+  font-size: 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: #0b5fff;
+  color: #fff;
+  cursor: pointer;
+}
+button:disabled {
+  background: #999;
+  cursor: default;
+}
+.answer {
+  background: #f5f6f7;
+  border: 1px solid #e2e2e2;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 12px;
+  white-space: pre-wrap;
+}
+.status {
+  color: #555;
+  font-size: 0.9rem;
+  margin-top: 12px;
+}
+.status.error {
+  color: #b00020;
+}
+.sources {
+  margin-top: 12px;
+  padding-left: 20px;
+}
+.sources a {
+  color: #0b5fff;
+}
