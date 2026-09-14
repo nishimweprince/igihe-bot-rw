@@ -25,6 +25,11 @@ export type Conversation = {
   title: string;
   messages: Message[];
   createdAt: number;
+  /** Estimated token counts for this chat (client-side heuristic, see countTokens). */
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Model id last reported by the SSE `done` event for this chat. */
+  model?: string;
 };
 
 export type ChatPhase = "idle" | "searching" | "streaming" | "done" | "error";
@@ -42,6 +47,47 @@ export type ParsedEvent = {
 };
 
 export const CHAT_PATH = "/v1/chat";
+
+/** Comparison link for billed OpenAI usage; local inference is not billed at these rates. */
+export const PRICING_URL = "https://openai.com/api/pricing/";
+
+/** Fallback model label when no SSE `done` event has reported one yet. */
+export const FALLBACK_MODEL = "fake-gen-v1";
+
+/**
+ * Rough client-side token estimate: ~4 characters per token.
+ * Labeled as an estimate in the UI; never exact billing.
+ */
+export function countTokens(text: string): number {
+  const t = text.trim();
+  if (!t) return 0;
+  return Math.max(1, Math.ceil(t.length / 4));
+}
+
+export type ConversationUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  total: number;
+  model?: string;
+};
+
+/** Normalized usage for one conversation; legacy blobs without fields read as zero. */
+export function conversationUsage(conv: Conversation): ConversationUsage {
+  const inputTokens = conv.inputTokens ?? 0;
+  const outputTokens = conv.outputTokens ?? 0;
+  return { inputTokens, outputTokens, total: inputTokens + outputTokens, model: conv.model };
+}
+
+/** Summed usage across every stored conversation. */
+export function totalUsage(state: ThreadState): Omit<ConversationUsage, "model"> & { total: number } {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  for (const c of state.conversations) {
+    inputTokens += c.inputTokens ?? 0;
+    outputTokens += c.outputTokens ?? 0;
+  }
+  return { inputTokens, outputTokens, total: inputTokens + outputTokens };
+}
 
 export const STATUS = {
   idle: "Baza ikibazo mu Kinyarwanda.",
@@ -119,7 +165,7 @@ export function formatSourceDate(publishedAt: string): string {
 }
 
 export function createConversation(id: string = newId()): Conversation {
-  return { id, title: NEW_CHAT_TITLE, messages: [], createdAt: Date.now() };
+  return { id, title: NEW_CHAT_TITLE, messages: [], createdAt: Date.now(), inputTokens: 0, outputTokens: 0 };
 }
 
 export function createThreadState(id: string = newId()): ThreadState {
@@ -162,7 +208,12 @@ export function beginTurn(state: ThreadState, userText: string): ThreadState {
   return mapConversation(
     { ...state, phase: "searching", status: STATUS.searching },
     conv.id,
-    (c) => ({ ...c, title, messages: [...c.messages, user, assistant] }),
+    (c) => ({
+      ...c,
+      title,
+      messages: [...c.messages, user, assistant],
+      inputTokens: (c.inputTokens ?? 0) + countTokens(text),
+    }),
   );
 }
 
@@ -177,7 +228,7 @@ export function appendToken(
     if (!last) return c;
     const messages = c.messages.slice();
     messages[messages.length - 1] = { ...last, content: joinToken(last.content, chunk) };
-    return { ...c, messages };
+    return { ...c, messages, outputTokens: (c.outputTokens ?? 0) + countTokens(chunk) };
   });
 }
 
@@ -323,7 +374,13 @@ export function applySseEvent(
     return attachSources(state, sourcesFromData(data), conversationId);
   }
   if (event === "done") {
-    return { ...state, phase: "done", status: STATUS.done };
+    const rec = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const model = typeof rec.model === "string" && rec.model ? rec.model : undefined;
+    if (!model) return { ...state, phase: "done", status: STATUS.done };
+    return mapConversation({ ...state, phase: "done", status: STATUS.done }, conversationId, (c) => ({
+      ...c,
+      model,
+    }));
   }
   if (event === "error") {
     const rec = data && typeof data === "object" ? (data as Record<string, unknown>) : {};

@@ -32,9 +32,13 @@ import {
 
 import {
   CHAT_PATH,
+  FALLBACK_MODEL,
   NEW_CHAT_TITLE,
+  PRICING_URL,
   STATUS,
+  conversationUsage,
   pickSuggestions,
+  totalUsage,
   SUGGESTION_COUNT,
   SUGGESTION_POOL,
   applySseEvent,
@@ -315,7 +319,7 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(() => SUGGESTION_POOL.slice(0, SUGGESTION_COUNT));
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [modal, setModal] = useState<{ type: "share" | "delete"; id: string; link?: string } | null>(
+  const [modal, setModal] = useState<{ type: "share" | "delete" | "usage"; id?: string; link?: string } | null>(
     null,
   );
   const [linkCopied, setLinkCopied] = useState(false);
@@ -330,6 +334,9 @@ export default function Home() {
   const empty = messages.length === 0;
   const busy = isBusy(state.phase);
   const groups = groupConversations(listedConversations(state));
+  const usageActive = active ? conversationUsage(active) : null;
+  const usageTotal = totalUsage(state);
+  const usageModel = usageActive?.model ?? FALLBACK_MODEL;
 
   // Follow the stream only while the reader is already at the bottom.
   const onThreadScroll = useCallback(() => {
@@ -435,7 +442,7 @@ export default function Home() {
   }
 
   function confirmDelete() {
-    if (!modal || modal.type !== "delete") return;
+    if (!modal || modal.type !== "delete" || !modal.id) return;
     const id = modal.id;
     setModal(null);
     stop();
@@ -552,6 +559,15 @@ export default function Home() {
             Inkuru za IGIHE · demo
             <br />
             Ibiganiro bibikwa kuri iki gikoresho gusa
+            <br />
+            <button
+              type="button"
+              className="foot-link"
+              onClick={() => setModal({ type: "usage", id: state.activeId })}
+              aria-label="Reba ikoreshwa rya tokens"
+            >
+              Reba ikoreshwa rya tokens
+            </button>
           </div>
         </div>
       </aside>
@@ -663,6 +679,64 @@ export default function Home() {
                 "Koporora ihuza"
               )}
             </button>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button type="button" className="btn-ghost">
+                Funga
+              </button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === "usage"} onOpenChange={(open) => { if (!open) setModal(null); }}>
+        <DialogContent>
+          <DialogTitle>Ikoreshwa rya tokens</DialogTitle>
+          <DialogDescription>
+            Ibibarwa ni igereranya (~), si fagitire. Bara inyuguti / 4 kuri buri butumwa.
+          </DialogDescription>
+          <div className="usage">
+            <p className="usage-model">
+              Model: <span className="usage-model-name">{usageModel}</span>
+            </p>
+            <table className="usage-table">
+              <caption className="usage-caption">Iki kiganiro</caption>
+              <tbody>
+                <tr>
+                  <th scope="row">Ibyoherejwe (injyana)</th>
+                  <td>~{usageActive?.inputTokens ?? 0}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Ibyakiriwe (insubizo)</th>
+                  <td>~{usageActive?.outputTokens ?? 0}</td>
+                </tr>
+                <tr className="usage-total-row">
+                  <th scope="row">Igiteranyo</th>
+                  <td>~{usageActive?.total ?? 0}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table className="usage-table">
+              <caption className="usage-caption">Ibiganiro byose</caption>
+              <tbody>
+                <tr>
+                  <th scope="row">Ibyoherejwe (injyana)</th>
+                  <td>~{usageTotal.inputTokens}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Ibyakiriwe (insubizo)</th>
+                  <td>~{usageTotal.outputTokens}</td>
+                </tr>
+                <tr className="usage-total-row">
+                  <th scope="row">Igiteranyo</th>
+                  <td>~{usageTotal.total}</td>
+                </tr>
+              </tbody>
+            </table>
+            <a className="pricing-link" href={PRICING_URL} target="_blank" rel="noreferrer">
+              Gereranya ibiciro bya OpenAI ({usageModel}) ↗
+            </a>
           </div>
           <DialogFooter>
             <DialogClose asChild>
