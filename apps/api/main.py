@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from igihe_assistant.config import Settings
 from igihe_assistant.embeddings.embedder import FakeHashEmbedder
 from igihe_assistant.generation.generator import FakeGenerator
+from igihe_assistant.generation.mlx_gen import MlxGenerator
 from igihe_assistant.generation.ollama_gen import OllamaGenerator
 from igihe_assistant.generation.validator import CITE, validate
 from igihe_assistant.normalization.normalize import content_terms, normalize_search
@@ -36,7 +37,17 @@ app.add_middleware(
 settings = Settings()
 embedder = FakeHashEmbedder()
 fake_generator = FakeGenerator()
-if settings.ollama_model:
+if settings.mlx_model_path:
+    try:
+        generator = MlxGenerator(settings.mlx_model_path)
+    except Exception:
+        # Badly configured local path must degrade, never prevent startup.
+        metrics.incr("generator.mlx_config_fallback")
+        if settings.ollama_model:
+            generator = OllamaGenerator(settings.ollama_model, settings.ollama_base_url)
+        else:
+            generator = fake_generator
+elif settings.ollama_model:
     generator = OllamaGenerator(settings.ollama_model, settings.ollama_base_url)
 else:
     generator = fake_generator
@@ -191,6 +202,7 @@ def ready():
         "backend": settings.backend,
         "articles": len(st["articles"]),
         "ollama_model": settings.ollama_model or "fake-gen-v1",
+        "model": generator.model_id,
     }
 
 

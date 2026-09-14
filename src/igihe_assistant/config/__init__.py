@@ -28,6 +28,9 @@ class Settings:
         default_factory=lambda: os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     )
     ollama_model: str = field(default_factory=lambda: os.environ.get("OLLAMA_MODEL", ""))
+    mlx_model_path: str = field(
+        default_factory=lambda: os.environ.get("MLX_MODEL_PATH", "")
+    )
     embedding_model: str = field(
         default_factory=lambda: os.environ.get("EMBEDDING_MODEL", "fake-hash-v1")
     )

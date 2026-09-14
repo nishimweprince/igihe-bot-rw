@@ -20,10 +20,10 @@ class FakeGenerator:
         if not sources:
             return NO_EVIDENCE_RW
         lines = []
-        for i, s in enumerate(sources[:3], start=1):
-            snippet = s["content"][:220].replace("\n", " ")
+        for i, s in enumerate(sources[:2], start=1):
+            snippet = s["content"][:140].replace("\n", " ")
             lines.append(f"{snippet} [{i}]")
-        head = "Dushingiye ku nkuru za IGIHE: "
+        head = "Mu nkuru za IGIHE nabonye ko: "
         text = head + " ".join(lines)
         # Crude token cap by words.
         words = text.split()

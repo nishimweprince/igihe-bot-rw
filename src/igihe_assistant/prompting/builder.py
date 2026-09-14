@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 SYSTEM_KINYARWANDA = (
-    "Urasubiza mu Kinyarwanda gusa. Koresha GUSA ibimenyetso biri hasi. "
-    "Buri nteruro ivuga ukuri irangira na [1] cyangwa [2]. "
+    "Urasubiza mu Kinyarwanda cyoroshye kandi cya bugufi, "
+    "nk'uko waganira na mugenzi wawe. Koresha GUSA ibimenyetso biri hasi. "
+    "Subiza mu nteruro 1-3 ngufi; buri nteruro ivuga ukuri irangira na "
+    "[1] cyangwa [2]. "
     "Niba ibimenyetso bidahagije, subiza gusa: Mbabarira, nta bimenyetso bihagije. "
     "Ntusubiremo ibimenyetso uko byakabaye; subiza ikibazo gusa."
 )
@@ -15,10 +17,12 @@ REFUSAL_SHORT = "Mbabarira, nta bimenyetso bihagije."
 # demo model sometimes echoes instructions instead of answering; ordinary
 # answers never contain these exact strings. Keep in sync with the template.
 ECHO_PHRASES = (
-    "Urasubiza mu Kinyarwanda gusa",
+    "Urasubiza mu Kinyarwanda cyoroshye",
+    "waganira na mugenzi wawe",
     "Koresha GUSA ibimenyetso biri hasi",
     "Ntusubiremo ibimenyetso uko byakabaye",
-    "Subiza mu Kinyarwanda gikeya ukoresheje gusa ibimenyetso",
+    "Subiza mu nteruro 1-3 ngufi",
+    "nko kuganira",
     "Urugero: Abahinga bazacibwa amande [1].",
     "Ongera usubize, rangiza buri nteruro na [1].",
     "Ibimenyetso:",
@@ -46,8 +50,9 @@ def build_messages(question: str, sources: list[dict]) -> tuple[str, str]:
         "Ibimenyetso:\n"
         f"{build_evidence_block(sources)}\n\n"
         f"Ikibazo: {question}\n"
-        "Subiza mu Kinyarwanda gikeya ukoresheje gusa ibimenyetso; "
-        "rangiza interuro na [1]. Urugero: Abahinga bazacibwa amande [1].\n"
+        "Subiza mu nteruro 1-3 ngufi, mu Kinyarwanda cyoroshye nko kuganira; "
+        "koresha gusa ibimenyetso; rangiza interuro na [1]. "
+        "Urugero: Abahinga bazacibwa amande [1].\n"
         "Igisubizo:"
     )
     return SYSTEM_KINYARWANDA, user
