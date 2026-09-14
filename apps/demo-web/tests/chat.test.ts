@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   NEW_CHAT_TITLE,
   STATUS,
+  STORAGE_KEY,
   SUGGESTION_COUNT,
   SUGGESTION_POOL,
   applySseEvent,
@@ -20,9 +21,17 @@ import {
   groupConversations,
   isBusy,
   listedConversations,
+  decodeShare,
+  deleteConversation,
+  encodeShare,
+  importSharedConversation,
+  loadThreads,
   parseSseBuffer,
   pickSuggestions,
+  saveThreads,
+  shareLink,
   startNewChat,
+  type ThreadState,
 } from "../lib/chat.ts";
 
 const SAMPLE_SSE = [
@@ -240,7 +249,7 @@ describe("groupConversations", () => {
         ["Uyu munsi", ["today"]],
         ["Ejo hashize", ["yesterday"]],
         ["Iminsi 7 ishize", ["week"]],
-        ["Kera", ["old"]],
+        ["Mbere y'aho", ["old"]],
       ],
     );
     assert.deepEqual(groupConversations([], now), []);
@@ -264,5 +273,147 @@ describe("pickSuggestions", () => {
   it("clamps counts outside the pool range", () => {
     assert.deepEqual(pickSuggestions(0), []);
     assert.equal(pickSuggestions(99).length, SUGGESTION_POOL.length);
+  });
+});
+
+describe("thread persistence", () => {
+  function memStore() {
+    const map = new Map<string, string>();
+    return {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+    };
+  }
+
+  function twoChatState(): ThreadState {
+    let s = createThreadState("a");
+    s = beginTurn(s, "hi");
+    return startNewChat(s, "b");
+  }
+
+  it("round-trips conversations and the active id", () => {
+    const store = memStore();
+    const state = twoChatState();
+    saveThreads(state, store);
+    assert.ok(store.getItem(STORAGE_KEY)?.includes('"v":1'));
+    const loaded = loadThreads(store);
+    assert.deepEqual(
+      loaded?.conversations.map((c) => c.id),
+      ["b", "a"],
+    );
+    assert.equal(loaded?.activeId, "b");
+  });
+
+  it("resets a stranded streaming phase on load", () => {
+    const store = memStore();
+    const state = twoChatState();
+    saveThreads({ ...state, phase: "streaming" }, store);
+    assert.equal(loadThreads(store)?.phase, "idle");
+  });
+
+  it("returns null for missing, corrupt, or shapeless payloads", () => {
+    assert.equal(loadThreads(memStore()), null);
+    assert.equal(loadThreads(null), null);
+    const bad = memStore();
+    bad.setItem(STORAGE_KEY, "not-json{{{");
+    assert.equal(loadThreads(bad), null);
+    const shapeless = memStore();
+    shapeless.setItem(STORAGE_KEY, JSON.stringify({ v: 1, conversations: [{ nope: true }] }));
+    assert.equal(loadThreads(shapeless), null);
+  });
+
+  it("save is a no-op without storage", () => {
+    saveThreads(createThreadState("a"), null);
+  });
+});
+
+describe("deleteConversation", () => {
+  function threeChatState(): ThreadState {
+    let s = createThreadState("a");
+    s = beginTurn(s, "one");
+    s = startNewChat(s, "b");
+    s = beginTurn(s, "two");
+    return startNewChat(s, "c");
+  }
+
+  it("removes a non-active chat and keeps the active one", () => {
+    const next = deleteConversation(threeChatState(), "b");
+    assert.deepEqual(next.conversations.map((c) => c.id), ["c", "a"]);
+    assert.equal(next.activeId, "c");
+  });
+
+  it("moves to the newest remaining chat when the active one is deleted", () => {
+    const next = deleteConversation(threeChatState(), "c");
+    assert.deepEqual(next.conversations.map((c) => c.id), ["b", "a"]);
+    assert.equal(next.activeId, "b");
+    assert.equal(next.phase, "idle");
+  });
+
+  it("starts a fresh chat when the last one is deleted", () => {
+    const next = deleteConversation(createThreadState("only"), "only");
+    assert.equal(next.conversations.length, 1);
+    assert.equal(next.activeId, next.conversations[0].id);
+  });
+
+  it("ignores unknown ids", () => {
+    const state = threeChatState();
+    assert.equal(deleteConversation(state, "nope"), state);
+  });
+});
+
+describe("share links", () => {
+  function sharedState(): ThreadState {
+    const s = createThreadState("a");
+    return {
+      ...s,
+      conversations: [
+        {
+          id: "a",
+          title: "Amazi",
+          createdAt: 1,
+          messages: [
+            { id: "m1", role: "user", content: "Amazi?", sources: [] },
+            {
+              id: "m2",
+              role: "assistant",
+              content: "Yego [1].",
+              sources: [{ n: 1, wp_id: 101, title: "T", published_at: "2024-01-01", url: "https://x" }],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("round-trips title, messages, and sources with fresh ids", () => {
+    const conv = sharedState().conversations[0];
+    const back = decodeShare(encodeShare(conv));
+    assert.equal(back?.title, "Amazi");
+    assert.deepEqual(
+      back?.messages.map((m) => [m.role, m.content]),
+      [
+        ["user", "Amazi?"],
+        ["assistant", "Yego [1]."],
+      ],
+    );
+    assert.equal(back?.messages[1].sources[0].wp_id, 101);
+    assert.notEqual(back?.id, conv.id);
+    const link = shareLink(conv, "https://demo.test/");
+    assert.ok(link.startsWith("https://demo.test/#s="));
+    assert.deepEqual(decodeShare(link.split("#s=")[1])?.title, "Amazi");
+  });
+
+  it("rejects garbage and wrong-shaped payloads", () => {
+    assert.equal(decodeShare("!!!not-base64!!!"), null);
+    assert.equal(decodeShare("e30"), null); // "{}"
+  });
+
+  it("imports a shared conversation as active", () => {
+    const state = createThreadState("mine");
+    const conv = decodeShare(encodeShare(sharedState().conversations[0]));
+    assert.ok(conv);
+    const next = importSharedConversation(state, conv!);
+    assert.equal(next.activeId, conv!.id);
+    assert.equal(next.conversations.length, 2);
   });
 });

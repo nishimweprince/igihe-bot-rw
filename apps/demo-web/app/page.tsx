@@ -5,19 +5,38 @@ import {
   ArrowUp,
   Check,
   Copy,
+  Ellipsis,
   Menu,
   PanelLeftClose,
+  Share2,
   Square,
   SquarePen,
+  Trash2,
   X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 import {
   CHAT_PATH,
   NEW_CHAT_TITLE,
   STATUS,
   pickSuggestions,
+  SUGGESTION_COUNT,
+  SUGGESTION_POOL,
   applySseEvent,
   beginTurn,
   canSend,
@@ -25,16 +44,24 @@ import {
   chatRequestBody,
   completeIfStreaming,
   createThreadState,
+  decodeShare,
+  deleteConversation,
   failHttp,
   failNetwork,
   formatSourceDate,
   getActive,
   groupConversations,
+  importSharedConversation,
   isBusy,
   listedConversations,
+  loadThreads,
   parseSseBuffer,
+  saveThreads,
   selectConversation,
+  shareLink,
+  SHARE_HASH_PREFIX,
   startNewChat,
+  type Conversation,
   type Message,
   type Source,
   type ThreadState,
@@ -100,7 +127,7 @@ function Composer({
           }}
           onKeyDown={onKeyDown}
           placeholder="Baza ikibazo"
-          aria-label="Ubutumwa"
+          aria-label="Andika ikibazo cyawe"
         />
         {busy ? (
           <button type="button" className="composer-action stop" onClick={onStop} aria-label="Hagarika">
@@ -282,9 +309,16 @@ function IconButton({
 }
 
 export default function Home() {
+  // Server and first client render must match, so the initial state never
+  // touches localStorage or Math.random; saved chats are restored on mount.
   const [state, setState] = useState<ThreadState>(() => createThreadState("demo-web"));
-  const [suggestions, setSuggestions] = useState<string[]>(() => pickSuggestions());
+  const [hydrated, setHydrated] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>(() => SUGGESTION_POOL.slice(0, SUGGESTION_COUNT));
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modal, setModal] = useState<{ type: "share" | "delete"; id: string; link?: string } | null>(
+    null,
+  );
+  const [linkCopied, setLinkCopied] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
@@ -380,18 +414,75 @@ export default function Home() {
     setDrawerOpen(false);
   }
 
+  function openShare(conv: Conversation) {
+    const base = `${window.location.origin}${window.location.pathname}`;
+    setLinkCopied(false);
+    setModal({ type: "share", id: conv.id, link: shareLink(conv, base) });
+  }
+
+  async function copyShareLink() {
+    if (!modal?.link) return;
+    try {
+      await navigator.clipboard.writeText(modal.link);
+      setLinkCopied(true);
+    } catch {
+      /* clipboard unavailable: the link stays selectable above */
+    }
+  }
+
+  function openDelete(id: string) {
+    setModal({ type: "delete", id });
+  }
+
+  function confirmDelete() {
+    if (!modal || modal.type !== "delete") return;
+    const id = modal.id;
+    setModal(null);
+    stop();
+    setState((s) => deleteConversation(s, id));
+  }
+
+  // Restore chats saved on this device, then persist every change. Saving
+  // waits for the restore so an empty first render never overwrites storage;
+  // failures (private mode, quota) keep the demo memory-only.
+  useEffect(() => {
+    const saved = loadThreads();
+    if (saved) setState(saved);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) saveThreads(state);
+  }, [state, hydrated]);
+
+  // Open a shared conversation link exactly once per load. The ref guard
+  // keeps StrictMode's double-mount (dev) from importing it twice.
+  const sharedImportDone = useRef(false);
+  useEffect(() => {
+    if (sharedImportDone.current) return;
+    sharedImportDone.current = true;
+    const hash = window.location.hash;
+    if (!hash.startsWith(SHARE_HASH_PREFIX)) return;
+    const conv = decodeShare(hash.slice(SHARE_HASH_PREFIX.length));
+    if (conv) {
+      setState((s) => importSharedConversation(s, conv));
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const composer = (props: { autoFocus?: boolean }) => (
     <Composer busy={busy} onSend={send} onStop={stop} autoFocus={props.autoFocus} />
   );
 
   const footnote: ReactNode = (
-    <p className="footnote">Umufasha ashobora kwibeshya. Genzura inkuru za IGIHE.</p>
+    <p className="footnote">Umufasha ashobora kwibeshya. Genzura amakuru mu nkuru za IGIHE.</p>
   );
 
   return (
     <div className={`shell${collapsed ? " collapsed" : ""}`}>
       {drawerOpen ? (
-        <button type="button" className="backdrop" aria-label="Funga urutonde" onClick={() => setDrawerOpen(false)} />
+        <button type="button" className="backdrop" aria-label="Funga urutonde rw'ibiganiro" onClick={() => setDrawerOpen(false)} />
       ) : null}
 
       <aside className={`sidebar${drawerOpen ? " open" : ""}`} aria-label="Ibiganiro">
@@ -400,7 +491,7 @@ export default function Home() {
             <span className="brand">
               IGIHE<span className="brand-dot" aria-hidden="true" />
             </span>
-            <IconButton label="Hisha urutonde" icon={PanelLeftClose} className="only-desktop" onClick={() => setCollapsed(true)} />
+            <IconButton label="Hisha urutonde rw'ibiganiro" icon={PanelLeftClose} className="only-desktop" onClick={() => setCollapsed(true)} />
             <IconButton label="Funga" icon={X} className="only-mobile" onClick={() => setDrawerOpen(false)} />
           </div>
 
@@ -417,30 +508,59 @@ export default function Home() {
                 <div className="history-group" key={g.label}>
                   <h2 className="history-label">{g.label}</h2>
                   {g.items.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={`sidebar-row history-item${c.id === state.activeId ? " active" : ""}`}
-                      aria-current={c.id === state.activeId ? "page" : undefined}
-                      onClick={() => onSelect(c.id)}
-                    >
-                      <span className="history-title">{c.title}</span>
-                    </button>
+                    <div className="history-item-row" key={c.id}>
+                      <button
+                        type="button"
+                        className={`sidebar-row history-item${c.id === state.activeId ? " active" : ""}`}
+                        aria-current={c.id === state.activeId ? "page" : undefined}
+                        onClick={() => onSelect(c.id)}
+                      >
+                        <span className="history-title">{c.title}</span>
+                      </button>
+                      <div className="history-actions">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              aria-label="Amahitamo y'ikiganiro"
+                              title="Amahitamo"
+                            >
+                              <Ellipsis aria-hidden="true" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => openShare(c)}>
+                              <Share2 aria-hidden="true" />
+                              <span>Sangiza ikiganiro</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => openDelete(c.id)} className="danger">
+                              <Trash2 aria-hidden="true" />
+                              <span>Siba ikiganiro</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
                   ))}
                 </div>
               ))
             )}
           </nav>
 
-          <div className="sidebar-foot">Inkuru za IGIHE · demo</div>
+          <div className="sidebar-foot">
+            Inkuru za IGIHE · demo
+            <br />
+            Ibiganiro bibikwa kuri iki gikoresho gusa
+          </div>
         </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
-          <IconButton label="Ibiganiro" icon={Menu} className="only-mobile" onClick={() => setDrawerOpen(true)} />
+          <IconButton label="Fungura urutonde rw'ibiganiro" icon={Menu} className="only-mobile" onClick={() => setDrawerOpen(true)} />
           <IconButton
-            label="Erekana urutonde"
+            label="Erekana urutonde rw'ibiganiro"
             icon={Menu}
             className="only-desktop topbar-expand"
             onClick={() => setCollapsed(false)}
@@ -456,7 +576,7 @@ export default function Home() {
           <div className="welcome">
             <div className="welcome-inner">
               <h1 className="welcome-title">Nagufasha iki uyu munsi?</h1>
-              <p className="welcome-sub">Baza ikibazo mu Kinyarwanda ku nkuru za IGIHE.</p>
+              <p className="welcome-sub">Baza mu Kinyarwanda ikibazo cyose ku nkuru za IGIHE.</p>
               {composer({ autoFocus: true })}
               <ul className="suggestions" aria-label="Ingero z'ibibazo">
                 {suggestions.map((q) => (
@@ -493,6 +613,66 @@ export default function Home() {
           </>
         )}
       </main>
+
+      <Dialog open={modal?.type === "delete"} onOpenChange={(open) => { if (!open) setModal(null); }}>
+        <DialogContent>
+          <DialogTitle>Siba ikiganiro?</DialogTitle>
+          <DialogDescription>
+            {(() => {
+              const conv = modal ? state.conversations.find((c) => c.id === modal.id) : undefined;
+              return (
+                <>
+                  Ikiganiro {conv ? `“${conv.title}” ` : ""}kizasibwa burundu kuri iki gikoresho. Ntibishobora gusubizwaho.
+                </>
+              );
+            })()}
+          </DialogDescription>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button type="button" className="btn-ghost">
+                Reka
+              </button>
+            </DialogClose>
+            <button type="button" className="btn-danger" onClick={confirmDelete} autoFocus>
+              Siba
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === "share"} onOpenChange={(open) => { if (!open) setModal(null); }}>
+        <DialogContent>
+          <DialogTitle>Sangiza ikiganiro</DialogTitle>
+          <DialogDescription>
+            Umuntu wese ufite iri huza ashobora kubona iki kiganiro.
+          </DialogDescription>
+          <div className="share-link-row">
+            <input
+              className="share-link-input"
+              readOnly
+              value={modal?.link ?? ""}
+              aria-label="Ihuza ryo gusangiza"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <button type="button" className="btn-primary" onClick={copyShareLink}>
+              {linkCopied ? (
+                <>
+                  <Check aria-hidden="true" /> Ryakoporowe
+                </>
+              ) : (
+                "Koporora ihuza"
+              )}
+            </button>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <button type="button" className="btn-ghost">
+                Funga
+              </button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

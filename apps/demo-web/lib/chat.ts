@@ -45,15 +45,15 @@ export const CHAT_PATH = "/v1/chat";
 
 export const STATUS = {
   idle: "Baza ikibazo mu Kinyarwanda.",
-  searching: "Ndashaka mu nkuru za IGIHE",
-  streaming: "Ndasubiza",
-  done: "Igisubizo kirangiye.",
+  searching: "Ndimo gushakisha mu nkuru za IGIHE",
+  streaming: "Ndimo gusubiza",
+  done: "Igisubizo cyarangiye.",
   cancelled: "Igisubizo cyahagaritswe.",
-  http413: "Ubutumwa burarenze urugero. Gerageza ubutumwa bugufi.",
-  http429: "Serivisi iruzuye. Ongera ugerageze nyuma y'akanya.",
-  genericError: "Habaye ikosa. Ongera ugerageze.",
-  networkError: "Ntibyashobotse kugera kuri serivisi. Menya ko API iriho (port 8000).",
-  streamErrorFallback: "Habaye ikosa.",
+  http413: "Ubutumwa bwawe ni burebure cyane. Bugire bugufi hanyuma wongere ugerageze.",
+  http429: "Serivisi irahuze ubu. Ongera ugerageze mu kanya gato.",
+  genericError: "Habaye ikibazo. Ongera ugerageze.",
+  networkError: "Ntibyakunze guhuza na serivisi. Reba niba API iri gukora (port 8000).",
+  streamErrorFallback: "Habaye ikibazo.",
 } as const;
 
 export const NEW_CHAT_TITLE = "Ikiganiro gishya";
@@ -64,7 +64,7 @@ export const SUGGESTION_POOL = [
   "Habaye iki mu mupira w'amaguru iki cyumweru?",
   "Ni izihe nkuru ziheruka ku bukungu bw'u Rwanda?",
   "Ni izihe nkuru ku buhinzi bw'ikawa mu Rwanda?",
-  "APR yatsinze ite umukino iheruka?",
+  "APR FC yagenze ite mu mukino uheruka?",
   "Tour du Rwanda igeze he?",
   "Ikirere kizaba kimeze kite i Kigali?",
   "Ni izihe nkuru zigezweho mu Rwanda?",
@@ -354,7 +354,7 @@ export function groupConversations(conversations: Conversation[], now: number = 
     { label: "Uyu munsi", items: [] },
     { label: "Ejo hashize", items: [] },
     { label: "Iminsi 7 ishize", items: [] },
-    { label: "Kera", items: [] },
+    { label: "Mbere y'aho", items: [] },
   ];
   for (const c of conversations) {
     const day = startOfDay(c.createdAt);
@@ -362,4 +362,157 @@ export function groupConversations(conversations: Conversation[], now: number = 
     buckets[idx].items.push(c);
   }
   return buckets.filter((b) => b.items.length > 0);
+}
+
+/* ---------- Persistence (this device only) ---------- */
+
+export const STORAGE_KEY = "igihe-demo-threads-v1";
+export const SHARE_HASH_PREFIX = "#s=";
+
+export type StorageLike = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+};
+
+function defaultStorage(): StorageLike | null {
+  try {
+    if (typeof globalThis.localStorage !== "undefined") return globalThis.localStorage;
+  } catch {
+    /* storage blocked: demo keeps running memory-only */
+  }
+  return null;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function isConversation(v: unknown): v is Conversation {
+  return (
+    isRecord(v) &&
+    typeof v.id === "string" &&
+    typeof v.title === "string" &&
+    Array.isArray(v.messages) &&
+    typeof v.createdAt === "number"
+  );
+}
+
+export function saveThreads(
+  state: ThreadState,
+  storage: StorageLike | null = defaultStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ v: 1, activeId: state.activeId, conversations: state.conversations }),
+    );
+  } catch {
+    /* quota/private mode: demo keeps running memory-only */
+  }
+}
+
+export function loadThreads(
+  storage: StorageLike | null = defaultStorage(),
+): ThreadState | null {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data: unknown = JSON.parse(raw);
+    if (!isRecord(data) || !Array.isArray(data.conversations)) return null;
+    const conversations = (data.conversations as unknown[]).filter(isConversation);
+    if (conversations.length === 0) return null;
+    const activeId =
+      typeof data.activeId === "string" &&
+      conversations.some((c) => c.id === data.activeId)
+        ? data.activeId
+        : conversations[0].id;
+    // Never restore a mid-stream phase; a reload strands it with no reader.
+    return { conversations, activeId, phase: "idle", status: STATUS.idle };
+  } catch {
+    return null;
+  }
+}
+
+export function deleteConversation(state: ThreadState, id: string): ThreadState {
+  if (!state.conversations.some((c) => c.id === id)) return state;
+  const conversations = state.conversations.filter((c) => c.id !== id);
+  if (conversations.length === 0) {
+    const conv = createConversation();
+    return { conversations: [conv], activeId: conv.id, phase: "idle", status: STATUS.idle };
+  }
+  if (state.activeId !== id) return { ...state, conversations };
+  return { ...state, conversations, activeId: conversations[0].id, phase: "idle", status: STATUS.idle };
+}
+
+/* ---------- Share links (encoded in the URL hash, no server) ---------- */
+
+function toB64Url(json: string): string {
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromB64Url(payload: string): string {
+  const bin = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+  return new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)));
+}
+
+function isShareMessage(v: unknown): v is { role: Role; content: string; sources: Source[] } {
+  if (!isRecord(v) || (v.role !== "user" && v.role !== "assistant")) return false;
+  if (typeof v.content !== "string" || !Array.isArray(v.sources)) return false;
+  return (v.sources as unknown[]).every(
+    (s) =>
+      isRecord(s) &&
+      typeof s.n === "number" &&
+      typeof s.wp_id === "number" &&
+      typeof s.title === "string" &&
+      typeof s.published_at === "string" &&
+      typeof s.url === "string",
+  );
+}
+
+export function encodeShare(conv: Conversation): string {
+  return toB64Url(
+    JSON.stringify({
+      v: 1,
+      title: conv.title,
+      messages: conv.messages.map((m) => ({ role: m.role, content: m.content, sources: m.sources })),
+    }),
+  );
+}
+
+export function decodeShare(payload: string): Conversation | null {
+  try {
+    const data: unknown = JSON.parse(fromB64Url(payload));
+    if (!isRecord(data) || data.v !== 1 || typeof data.title !== "string") return null;
+    if (!Array.isArray(data.messages) || !(data.messages as unknown[]).every(isShareMessage)) {
+      return null;
+    }
+    const messages: Message[] = (data.messages as { role: Role; content: string; sources: Source[] }[]).map(
+      (m) => ({ id: newId(), role: m.role, content: m.content, sources: m.sources }),
+    );
+    return { id: newId(), title: data.title as string, messages, createdAt: Date.now() };
+  } catch {
+    return null;
+  }
+}
+
+/** Absolute share URL for a conversation; `base` keeps this DOM-free for tests. */
+export function shareLink(conv: Conversation, base: string): string {
+  return `${base}${SHARE_HASH_PREFIX}${encodeShare(conv)}`;
+}
+
+export function importSharedConversation(state: ThreadState, conv: Conversation): ThreadState {
+  return {
+    ...state,
+    conversations: [conv, ...state.conversations],
+    activeId: conv.id,
+    phase: "idle",
+    status: STATUS.idle,
+  };
 }

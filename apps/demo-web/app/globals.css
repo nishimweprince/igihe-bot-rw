@@ -17,6 +17,7 @@
   --brand: #e4002b;
   --brand-soft: #fde8ec;
   --error: #b3261e;
+  --error-soft: #fdecea;
   --btn: #0d0d0d;
   --btn-fg: #ffffff;
   --btn-disabled: #d7d7d7;
@@ -45,6 +46,7 @@
     --brand: #ff4d6d;
     --brand-soft: #3a1a22;
     --error: #ff8a80;
+    --error-soft: #3a1f1d;
     --btn: #ffffff;
     --btn-fg: #0d0d0d;
     --btn-disabled: #4a4a4a;
@@ -243,7 +245,6 @@ button {
 .history-title {
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .history-empty {
@@ -252,6 +253,287 @@ button {
   font-size: 0.8rem;
   color: var(--text-3);
   line-height: 1.5;
+}
+
+/* Chat rows: the whole row is the hover target. The title fades out under
+   the ellipsis (mask, not a box) the way ChatGPT's sidebar does. */
+
+.history-item-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-radius: 10px;
+  transition: background-color 0.15s var(--ease);
+}
+
+.history-item-row .history-item {
+  flex: 1;
+  min-width: 0;
+  padding-right: 10px;
+  transition: padding-right 0.15s var(--ease);
+}
+
+.history-item-row:hover .history-item,
+.history-item-row:focus-within .history-item,
+.history-item-row:has([data-state="open"]) .history-item {
+  padding-right: 32px;
+}
+
+.history-item-row .history-item:hover {
+  background: transparent;
+}
+
+.history-item-row:hover,
+.history-item-row:focus-within,
+.history-item-row:has([data-state="open"]) {
+  background: var(--bg-hover);
+}
+
+.history-item-row:has(.history-item.active) {
+  background: var(--bg-active);
+}
+
+.history-item-row .history-item.active {
+  background: transparent;
+}
+
+/* Long titles always fade at the right edge; on hover the button's padding
+   grows so the fade slides left, under the ellipsis. */
+.history-title {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.history-actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease);
+}
+
+.history-item-row:hover .history-actions,
+.history-item-row:focus-within .history-actions,
+.history-item-row:has([data-state="open"]) .history-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.history-actions .icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--text-2);
+  background: transparent;
+}
+
+.history-actions .icon-btn:hover,
+.history-actions .icon-btn[data-state="open"] {
+  color: var(--text);
+  background: transparent;
+}
+
+.history-actions .icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: none) {
+  .history-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .history-item-row .history-item {
+    padding-right: 32px;
+  }
+}
+
+/* ---------- Dropdown menu ---------- */
+
+.menu {
+  min-width: 208px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  z-index: 60;
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation: pop-in 0.14s var(--ease) both;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+.menu-item[data-highlighted] {
+  background: var(--bg-hover);
+}
+
+.menu-item.danger,
+.menu-item.danger svg {
+  color: var(--error);
+}
+
+.menu-item.danger[data-highlighted] {
+  background: var(--error-soft);
+}
+
+/* ---------- Modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 70;
+  animation: fade 0.15s var(--ease) both;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(448px, calc(100vw - 32px));
+  padding: 24px;
+  border-radius: 24px;
+  background: var(--bg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  z-index: 71;
+  animation: modal-in 0.18s var(--ease) both;
+}
+
+.modal:focus {
+  outline: none;
+}
+
+.modal-title {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.modal-body {
+  margin: 0 0 20px;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-ghost,
+.btn-danger,
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+
+.btn-ghost svg,
+.btn-danger svg,
+.btn-primary svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+}
+
+.btn-danger {
+  background: var(--error);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  opacity: 0.88;
+}
+
+.btn-primary {
+  background: var(--btn);
+  color: var(--btn-fg);
+}
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
+
+.share-link-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.share-link-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-sidebar);
+  color: var(--text-2);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+}
+
+.share-link-input:focus,
+.share-link-input:focus-visible {
+  outline: none;
+  border-color: var(--text-3);
+  color: var(--text);
 }
 
 .sidebar-foot {
@@ -774,6 +1056,28 @@ a.cite:focus-visible {
   50% {
     transform: scale(0.75);
     opacity: 0.45;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
