@@ -1,3 +1,5 @@
+import { decodeEntities } from "./format.ts";
+
 export type Source = {
   n: number;
   wp_id: number;
@@ -14,6 +16,8 @@ export type Message = {
   content: string;
   sources: Source[];
   error?: boolean;
+  /** Placeholder text (e.g. a cancelled reply) rendered in a quiet style. */
+  muted?: boolean;
 };
 
 export type Conversation = {
@@ -41,15 +45,26 @@ export const CHAT_PATH = "/v1/chat";
 
 export const STATUS = {
   idle: "Baza ikibazo mu Kinyarwanda.",
-  searching: "Ndashaka ibimenyetso...",
-  streaming: "Ndasubiza...",
+  searching: "Ndashaka mu nkuru za IGIHE",
+  streaming: "Ndasubiza",
   done: "Igisubizo kirangiye.",
-  http413: "Igisubizo: ubutumwa burarenze urugero. Bugufi.",
-  http429: "Serivisi iruzuye, ongera ugerageze nyuma.",
+  cancelled: "Igisubizo cyahagaritswe.",
+  http413: "Ubutumwa burarenze urugero. Gerageza ubutumwa bugufi.",
+  http429: "Serivisi iruzuye. Ongera ugerageze nyuma y'akanya.",
   genericError: "Habaye ikosa. Ongera ugerageze.",
-  networkError: "API ntibashije kuboneka. Menya ko serivisi iriho (port 8000).",
+  networkError: "Ntibyashobotse kugera kuri serivisi. Menya ko API iriho (port 8000).",
   streamErrorFallback: "Habaye ikosa.",
 } as const;
+
+export const NEW_CHAT_TITLE = "Ikiganiro gishya";
+
+/** Sample questions shown on the empty thread. */
+export const SUGGESTIONS = [
+  "Perezida Kagame yavuze iki vuba?",
+  "Habaye iki mu mupira w'amaguru iki cyumweru?",
+  "Ni izihe nkuru ziheruka ku bukungu bw'u Rwanda?",
+  "Ni izihe nkuru ku buhinzi bw'ikawa mu Rwanda?",
+] as const;
 
 export function newId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -76,7 +91,7 @@ export function joinToken(existing: string, chunk: string): string {
 
 export function titleFromMessage(text: string): string {
   const t = text.trim().replace(/\s+/g, " ");
-  if (!t) return "New chat";
+  if (!t) return NEW_CHAT_TITLE;
   return t.length > 40 ? `${t.slice(0, 37)}...` : t;
 }
 
@@ -85,7 +100,7 @@ export function formatSourceDate(publishedAt: string): string {
 }
 
 export function createConversation(id: string = newId()): Conversation {
-  return { id, title: "New chat", messages: [], createdAt: Date.now() };
+  return { id, title: NEW_CHAT_TITLE, messages: [], createdAt: Date.now() };
 }
 
 export function createThreadState(id: string = newId()): ThreadState {
@@ -187,6 +202,19 @@ export function completeIfStreaming(state: ThreadState): ThreadState {
   return state;
 }
 
+/** Stop a turn early. Keeps whatever streamed so far; an empty reply reads as cancelled. */
+export function cancelTurn(state: ThreadState, conversationId: string = state.activeId): ThreadState {
+  if (!isBusy(state.phase)) return state;
+  const next = mapConversation(state, conversationId, (c) => {
+    const last = lastAssistant(c);
+    if (!last || last.content) return c;
+    const messages = c.messages.slice();
+    messages[messages.length - 1] = { ...last, content: STATUS.cancelled, muted: true };
+    return { ...c, messages };
+  });
+  return { ...next, phase: "done", status: STATUS.done };
+}
+
 export function failAssistant(
   state: ThreadState,
   message: string,
@@ -222,7 +250,7 @@ export function sourcesFromData(data: unknown): Source[] {
   for (const item of data) {
     if (!item || typeof item !== "object") continue;
     const rec = item as Record<string, unknown>;
-    const title = String(rec.title ?? "");
+    const title = decodeEntities(String(rec.title ?? "")).trim();
     const url = String(rec.url ?? "");
     if (!title || !url) continue;
     out.push({
@@ -288,4 +316,31 @@ export function applySseEvent(
 
 export function listedConversations(state: ThreadState): Conversation[] {
   return state.conversations.filter((c) => c.messages.length > 0);
+}
+
+export type ConversationGroup = { label: string; items: Conversation[] };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Bucket conversations the way ChatGPT's sidebar does: today, yesterday, last 7 days, older. */
+export function groupConversations(conversations: Conversation[], now: number = Date.now()): ConversationGroup[] {
+  const today = startOfDay(now);
+  const buckets: ConversationGroup[] = [
+    { label: "Uyu munsi", items: [] },
+    { label: "Ejo hashize", items: [] },
+    { label: "Iminsi 7 ishize", items: [] },
+    { label: "Kera", items: [] },
+  ];
+  for (const c of conversations) {
+    const day = startOfDay(c.createdAt);
+    const idx = day >= today ? 0 : day >= today - DAY_MS ? 1 : day >= today - 7 * DAY_MS ? 2 : 3;
+    buckets[idx].items.push(c);
+  }
+  return buckets.filter((b) => b.items.length > 0);
 }

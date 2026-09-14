@@ -31,6 +31,15 @@ class Settings:
     mlx_model_path: str = field(
         default_factory=lambda: os.environ.get("MLX_MODEL_PATH", "")
     )
+    openai_api_key: str = field(
+        default_factory=lambda: os.environ.get("OPENAI_API_KEY", "")
+    )
+    openai_model: str = field(default_factory=lambda: os.environ.get("OPENAI_MODEL", ""))
+    openai_base_url: str = field(
+        default_factory=lambda: os.environ.get(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        )
+    )
     embedding_model: str = field(
         default_factory=lambda: os.environ.get("EMBEDDING_MODEL", "fake-hash-v1")
     )

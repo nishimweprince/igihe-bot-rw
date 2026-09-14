@@ -39,7 +39,9 @@ Open `http://localhost:3000` in a browser. For the real-model demo,
 pull `ollama pull llama3.2:3b` and set `OLLAMA_MODEL=llama3.2:3b` for
 terminal 1 — or point `MLX_MODEL_PATH` at a converted local checkpoint
 (e.g. `models/alta-sft-v1.0-mlx`), which takes precedence and needs no
-server. `NEXT_PUBLIC_API_URL` overrides the API origin for the UI.
+server — or set `OPENAI_API_KEY` + `OPENAI_MODEL=gpt-4o-mini` for the
+OpenAI platform (billed per request; only retrieved snippets are sent).
+`NEXT_PUBLIC_API_URL` overrides the API origin for the UI.
 
 ## Layout
 

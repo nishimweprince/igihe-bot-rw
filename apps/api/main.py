@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from igihe_assistant.embeddings.embedder import FakeHashEmbedder
 from igihe_assistant.generation.generator import FakeGenerator
 from igihe_assistant.generation.mlx_gen import MlxGenerator
 from igihe_assistant.generation.ollama_gen import OllamaGenerator
+from igihe_assistant.generation.openai_gen import OpenAIGenerator
 from igihe_assistant.generation.validator import CITE, validate
 from igihe_assistant.normalization.normalize import content_terms, normalize_search
 from igihe_assistant.observability import metrics
@@ -37,7 +39,11 @@ app.add_middleware(
 settings = Settings()
 embedder = FakeHashEmbedder()
 fake_generator = FakeGenerator()
-if settings.mlx_model_path:
+if settings.openai_api_key and settings.openai_model:
+    generator = OpenAIGenerator(
+        settings.openai_model, settings.openai_api_key, settings.openai_base_url
+    )
+elif settings.mlx_model_path:
     try:
         generator = MlxGenerator(settings.mlx_model_path)
     except Exception:
@@ -247,8 +253,11 @@ async def chat(req: ChatRequest, request: Request):
         metrics.incr("requests.chat")
         if not sources:
             metrics.incr("requests.refusal")
-        for sentence in text.split(". "):
-            yield f"event: token\ndata: {json.dumps({'text': sentence})}\n\n"
+        # Stream one sentence per token event, keeping terminal punctuation
+        # so the client can join chunks with a single space.
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            if sentence:
+                yield f"event: token\ndata: {json.dumps({'text': sentence})}\n\n"
         pub = [
             {
                 "n": s["n"],

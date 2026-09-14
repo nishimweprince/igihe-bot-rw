@@ -2,17 +2,20 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  NEW_CHAT_TITLE,
   STATUS,
   applySseEvent,
   attachSources,
   beginTurn,
   canSend,
+  cancelTurn,
   chatRequestBody,
   completeIfStreaming,
   createThreadState,
   failHttp,
   failNetwork,
   getActive,
+  groupConversations,
   isBusy,
   listedConversations,
   parseSseBuffer,
@@ -125,7 +128,7 @@ describe("thread updates", () => {
     state = startNewChat(state, "c2");
     assert.equal(state.activeId, "c2");
     assert.equal(getActive(state).messages.length, 0);
-    assert.equal(getActive(state).title, "New chat");
+    assert.equal(getActive(state).title, NEW_CHAT_TITLE);
     assert.equal(state.phase, "idle");
     assert.equal(listedConversations(state).length, 1);
     assert.equal(listedConversations(state)[0]?.id, "c1");
@@ -190,5 +193,53 @@ describe("thread updates", () => {
       session_id: "demo-web",
       message: "Ni izihe nkuru ku mazi i Kigali?",
     });
+  });
+});
+
+describe("cancelTurn", () => {
+  it("keeps streamed text and finishes the turn", () => {
+    let state = beginTurn(createThreadState("t"), "Kagame?");
+    state = applySseEvent(state, { event: "token", data: { text: "Yavuze [1]." } });
+    state = cancelTurn(state);
+    assert.equal(state.phase, "done");
+    const last = getActive(state).messages.at(-1);
+    assert.equal(last?.content, "Yavuze [1].");
+    assert.equal(last?.muted, undefined);
+  });
+
+  it("marks an empty reply as cancelled", () => {
+    let state = beginTurn(createThreadState("t"), "Kagame?");
+    state = cancelTurn(state);
+    const last = getActive(state).messages.at(-1);
+    assert.equal(last?.content, STATUS.cancelled);
+    assert.equal(last?.muted, true);
+    assert.equal(isBusy(state.phase), false);
+  });
+
+  it("is a no-op when idle", () => {
+    const state = createThreadState("t");
+    assert.equal(cancelTurn(state), state);
+  });
+});
+
+describe("groupConversations", () => {
+  it("buckets by day relative to now and drops empty buckets", () => {
+    const now = new Date(2026, 8, 14, 12).getTime();
+    const day = 24 * 60 * 60 * 1000;
+    const mk = (id: string, createdAt: number) => ({ id, title: id, messages: [], createdAt });
+    const groups = groupConversations(
+      [mk("today", now - 1000), mk("yesterday", now - day), mk("week", now - 5 * day), mk("old", now - 30 * day)],
+      now,
+    );
+    assert.deepEqual(
+      groups.map((g) => [g.label, g.items.map((c) => c.id)]),
+      [
+        ["Uyu munsi", ["today"]],
+        ["Ejo hashize", ["yesterday"]],
+        ["Iminsi 7 ishize", ["week"]],
+        ["Kera", ["old"]],
+      ],
+    );
+    assert.deepEqual(groupConversations([], now), []);
   });
 });
