@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   NEW_CHAT_TITLE,
   STATUS,
+  SUGGESTION_COUNT,
+  SUGGESTION_POOL,
   applySseEvent,
   attachSources,
   beginTurn,
@@ -19,6 +21,7 @@ import {
   isBusy,
   listedConversations,
   parseSseBuffer,
+  pickSuggestions,
   startNewChat,
 } from "../lib/chat.ts";
 
@@ -241,5 +244,25 @@ describe("groupConversations", () => {
       ],
     );
     assert.deepEqual(groupConversations([], now), []);
+  });
+});
+
+describe("pickSuggestions", () => {
+  it("returns distinct pool members, default count", () => {
+    const picked = pickSuggestions();
+    assert.equal(picked.length, SUGGESTION_COUNT);
+    assert.equal(new Set(picked).size, picked.length);
+    for (const q of picked) assert.ok(SUGGESTION_POOL.includes(q));
+  });
+
+  it("is deterministic with a stubbed rand", () => {
+    const zeros = pickSuggestions(3, () => 0);
+    assert.deepEqual(zeros, pickSuggestions(3, () => 0));
+    assert.equal(new Set(zeros).size, 3);
+  });
+
+  it("clamps counts outside the pool range", () => {
+    assert.deepEqual(pickSuggestions(0), []);
+    assert.equal(pickSuggestions(99).length, SUGGESTION_POOL.length);
   });
 });

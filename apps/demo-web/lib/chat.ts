@@ -58,13 +58,32 @@ export const STATUS = {
 
 export const NEW_CHAT_TITLE = "Ikiganiro gishya";
 
-/** Sample questions shown on the empty thread. */
-export const SUGGESTIONS = [
+/** Pool of sample questions; a random few are shown on the empty thread. */
+export const SUGGESTION_POOL = [
   "Perezida Kagame yavuze iki vuba?",
   "Habaye iki mu mupira w'amaguru iki cyumweru?",
   "Ni izihe nkuru ziheruka ku bukungu bw'u Rwanda?",
   "Ni izihe nkuru ku buhinzi bw'ikawa mu Rwanda?",
+  "APR yatsinze ite umukino iheruka?",
+  "Tour du Rwanda igeze he?",
+  "Ikirere kizaba kimeze kite i Kigali?",
+  "Ni izihe nkuru zigezweho mu Rwanda?",
 ] as const;
+
+export const SUGGESTION_COUNT = 3;
+
+/** Fisher–Yates pick of `count` distinct suggestions. `rand` is injectable for tests. */
+export function pickSuggestions(
+  count: number = SUGGESTION_COUNT,
+  rand: () => number = Math.random,
+): string[] {
+  const pool = [...SUGGESTION_POOL];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.max(0, Math.min(count, pool.length)));
+}
 
 export function newId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();

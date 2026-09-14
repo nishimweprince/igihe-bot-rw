@@ -17,7 +17,7 @@ import {
   CHAT_PATH,
   NEW_CHAT_TITLE,
   STATUS,
-  SUGGESTIONS,
+  pickSuggestions,
   applySseEvent,
   beginTurn,
   canSend,
@@ -283,6 +283,7 @@ function IconButton({
 
 export default function Home() {
   const [state, setState] = useState<ThreadState>(() => createThreadState("demo-web"));
+  const [suggestions, setSuggestions] = useState<string[]>(() => pickSuggestions());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -370,6 +371,7 @@ export default function Home() {
 
   function onNewChat() {
     setState((s) => startNewChat(s));
+    setSuggestions(pickSuggestions());
     setDrawerOpen(false);
   }
 
@@ -457,7 +459,7 @@ export default function Home() {
               <p className="welcome-sub">Baza ikibazo mu Kinyarwanda ku nkuru za IGIHE.</p>
               {composer({ autoFocus: true })}
               <ul className="suggestions" aria-label="Ingero z'ibibazo">
-                {SUGGESTIONS.map((q) => (
+                {suggestions.map((q) => (
                   <li key={q}>
                     <button type="button" className="suggestion" onClick={() => send(q)}>
                       {q}
