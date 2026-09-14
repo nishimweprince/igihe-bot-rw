@@ -11,3 +11,6 @@ tests/
 
 # Agents
 .claude/
+
+# Logs
+*.log

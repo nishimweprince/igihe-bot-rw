@@ -56,11 +56,16 @@ def main() -> None:
     ap.add_argument("--per-page", type=int, default=100)
     ap.add_argument("--out", default="data/live-sample")
     ap.add_argument("--base-url", default="https://old.igihe.com")
+    ap.add_argument(
+        "--user-agent",
+        default=WordPressClient.user_agent,
+        help="HTTP User-Agent (some hosts block the default bot UA)",
+    )
     args = ap.parse_args()
 
     out = Path(args.out)
     (out / "pages").mkdir(parents=True, exist_ok=True)
-    client = WordPressClient(args.base_url, HttpxTransport(WordPressClient.user_agent))
+    client = WordPressClient(args.base_url, HttpxTransport(args.user_agent))
     posts: list[dict] = []
     wp_total: str | None = None
     for page in range(1, args.pages + 1):
