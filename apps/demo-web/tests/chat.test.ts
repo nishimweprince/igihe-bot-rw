@@ -239,6 +239,13 @@ describe("suggestionsFromData", () => {
     assert.deepEqual(suggestionsFromData({ suggestions: "Mbwira" }), []);
     assert.deepEqual(suggestionsFromData(null), []);
   });
+
+  it("decodes HTML entities carried by headlines", () => {
+    assert.deepEqual(
+      suggestionsFromData({ suggestions: ["Ibiciro bya&#8217;lisansi"] }),
+      ["Ibiciro bya’lisansi"],
+    );
+  });
 });
 
 describe("cancelTurn", () => {

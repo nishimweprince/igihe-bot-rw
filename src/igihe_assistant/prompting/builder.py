@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import html
+import re
+
 SYSTEM_KINYARWANDA = (
     "Urasubiza mu Kinyarwanda cyoroshye kandi cya bugufi, "
     "nk'uko waganira na mugenzi wawe. Koresha GUSA ibimenyetso biri hasi. "
@@ -35,14 +38,55 @@ NO_EVIDENCE_RW = (
     "Nzikwereka hasi inkuru zegereye ikibazo cyawe, ariko si ibisubizo nyabyo."
 )
 
-#: Sendable follow-up prompts offered when nothing close was found.
-NO_CLOSE_MATCH_SUGGESTIONS = ["Mbwira inkuru ziheruka."]
+#: Broad, always-answerable prompts used when nothing close was retrieved.
+FALLBACK_SUGGESTIONS = [
+    "Mbwira inkuru ziheruka.",
+    "Ni izihe nkuru zigezweho mu Rwanda?",
+    "Habaye iki mu mupira w'amaguru?",
+]
+
+#: Backwards-compatible alias; prefer FALLBACK_SUGGESTIONS.
+NO_CLOSE_MATCH_SUGGESTIONS = FALLBACK_SUGGESTIONS
+
+SUGGESTION_MAX_CHARS = 80
+
+
+def follow_up_suggestions(closest: list[dict], limit: int = 3) -> list[str]:
+    """Sendable prompts for a refusal: near-match headlines, then fallbacks.
+
+    A headline is the strongest possible query for its own article — it is
+    exactly the lexical support the retriever needs — so clicking one lands
+    on real content instead of re-refusing.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for source in closest:
+        raw = source.get("title", "") if isinstance(source, dict) else ""
+        title = re.sub(r"\s+", " ", html.unescape(str(raw))).strip()
+        if not title or len(title) > SUGGESTION_MAX_CHARS:
+            continue
+        key = title.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(title)
+        if len(out) >= limit:
+            return out
+    for fallback in FALLBACK_SUGGESTIONS:
+        key = fallback.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(fallback)
+        if len(out) >= limit:
+            break
+    return out
+
 
 NO_CLOSE_MATCH_RW = (
     "Mbabarira, nta bimenyetso bihagije mbona mu nkuru za IGIHE zo gusubiza "
     "icyo kibazo. Reba inkuru z'umwimerere kuri "
-    "[IGIHE](https://old.igihe.com). "
-    f"Gerageza ikindi kibazo, urugero: {NO_CLOSE_MATCH_SUGGESTIONS[0]}"
+    "[IGIHE](https://old.igihe.com)."
 )
 
 

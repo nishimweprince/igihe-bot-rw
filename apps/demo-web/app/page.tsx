@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowUp,
   Check,
@@ -8,6 +8,7 @@ import {
   Ellipsis,
   Menu,
   PanelLeftClose,
+  Search,
   Share2,
   Square,
   SquarePen,
@@ -278,6 +279,27 @@ function CopyButton({ message }: { message: Message }) {
   );
 }
 
+function SuggestionList({
+  items, label, onPick, className = "",
+}: { items: string[]; label?: string; onPick: (q: string) => void; className?: string }) {
+  if (!items.length) return null;
+  return (
+    <div className={`suggestion-group ${className}`}>
+      {label ? <p className="suggestions-label">{label}</p> : null}
+      <ul className={`suggestions`} aria-label="Ingero z'ibibazo">
+        {items.map((q, i) => (
+          <li key={q} style={{ "--i": i } as CSSProperties}>
+            <button type="button" className="suggestion" onClick={() => onPick(q)}>
+              <Search className="suggestion-icon" aria-hidden="true" />
+              <span>{q}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function AssistantTurn({
   message,
   streaming,
@@ -300,15 +322,7 @@ function AssistantTurn({
       )}
       {message.sources.length > 0 ? <Sources sources={message.sources} /> : null}
       {!streaming && message.suggestions?.length ? (
-        <ul className="suggestions in-turn" aria-label="Ingero z'ibibazo">
-          {message.suggestions.map((q) => (
-            <li key={q}>
-              <button type="button" className="suggestion" onClick={() => onSuggest(q)}>
-                {q}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SuggestionList items={message.suggestions ?? []} label="Gerageza kimwe muri ibi" onPick={onSuggest} className="in-turn mt-[14px]" />
       ) : null}
       {!streaming && message.content && !message.error && !message.muted ? (
         <div className="turn-actions">
@@ -621,15 +635,7 @@ export default function Home() {
               <h1 className="welcome-title">Nagufasha iki uyu munsi?</h1>
               <p className="welcome-sub">Baza mu Kinyarwanda ikibazo cyose ku nkuru za IGIHE.</p>
               {composer({ autoFocus: true })}
-              <ul className="suggestions" aria-label="Ingero z'ibibazo">
-                {suggestions.map((q) => (
-                  <li key={q}>
-                    <button type="button" className="suggestion" onClick={() => send(q)}>
-                      {q}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <SuggestionList items={suggestions} onPick={send} />
             </div>
             {footnote}
           </div>

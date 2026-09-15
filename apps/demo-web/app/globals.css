@@ -746,7 +746,33 @@ button {
   padding: 0;
 }
 
+.suggestion-group.in-turn {
+  margin-top: 14px;
+}
+
+.in-turn .suggestions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-top: 0;
+}
+
+.suggestions-label {
+  margin: 0 0 8px;
+  color: var(--text-3);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+  max-width: min(100%, 44ch);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: transparent;
@@ -763,9 +789,23 @@ button {
   color: var(--text);
 }
 
-.suggestions.in-turn {
-  justify-content: flex-start;
-  margin: 12px 0 0;
+.suggestion-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--text-3);
+  transition: color 0.15s var(--ease);
+}
+
+.suggestion:hover .suggestion-icon,
+.suggestion:focus-visible .suggestion-icon {
+  color: var(--brand);
+}
+
+
+.suggestions.in-turn li {
+  animation: rise 0.28s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
 }
 
 /* ---------- Thread ---------- */

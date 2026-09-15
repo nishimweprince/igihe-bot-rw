@@ -4,12 +4,14 @@ from igihe_assistant.generation.generator import FakeGenerator
 from igihe_assistant.generation.validator import CITE
 from igihe_assistant.prompting.builder import (
     ECHO_PHRASES,
+    FALLBACK_SUGGESTIONS,
     NO_CLOSE_MATCH_RW,
-    NO_CLOSE_MATCH_SUGGESTIONS,
     NO_EVIDENCE_RW,
+    SUGGESTION_MAX_CHARS,
     SYSTEM_KINYARWANDA,
     build_messages,
     build_prompt,
+    follow_up_suggestions,
 )
 
 SOURCES = [
@@ -60,9 +62,50 @@ def test_no_close_match_message_suggests_another_prompt():
     assert "—" not in NO_CLOSE_MATCH_RW
     assert "nta bimenyetso" in NO_CLOSE_MATCH_RW.lower()
     assert "[IGIHE](https://old.igihe.com)" in NO_CLOSE_MATCH_RW
-    assert NO_CLOSE_MATCH_SUGGESTIONS
-    for suggestion in NO_CLOSE_MATCH_SUGGESTIONS:
-        assert suggestion in NO_CLOSE_MATCH_RW
+    # Chips below the refusal carry the invitation now; the prose must not
+    # restate a suggestion.
+    assert FALLBACK_SUGGESTIONS
+    for suggestion in FALLBACK_SUGGESTIONS:
+        assert suggestion not in NO_CLOSE_MATCH_RW
+
+
+def test_follow_up_suggestions_derive_from_headlines():
+    closest = [
+        {"title": "Amazi meza i Kigali"},
+        {"title": "Ikawa yazamutse"},
+    ]
+    assert follow_up_suggestions(closest) == [
+        "Amazi meza i Kigali",
+        "Ikawa yazamutse",
+        FALLBACK_SUGGESTIONS[0],
+    ]
+
+
+def test_follow_up_suggestions_unescape_entities():
+    closest = [{"title": "Ibiciro bya lisansi &#8217; byiyongereye"}]
+    assert follow_up_suggestions(closest)[0] == "Ibiciro bya lisansi ’ byiyongereye"
+
+
+def test_follow_up_suggestions_drop_over_long_titles():
+    closest = [{"title": "x" * (SUGGESTION_MAX_CHARS + 1)}]
+    assert follow_up_suggestions(closest) == FALLBACK_SUGGESTIONS[:3]
+
+
+def test_follow_up_suggestions_dedupe_case_insensitively():
+    closest = [
+        {"title": "Amazi meza"},
+        {"title": "  AMAZI  MEZA "},
+        {"title": FALLBACK_SUGGESTIONS[0].upper()},
+    ]
+    out = follow_up_suggestions(closest)
+    assert out[0] == "Amazi meza"
+    assert len(out) == 3
+    assert len({s.casefold() for s in out}) == 3
+
+
+def test_follow_up_suggestions_fallbacks_alone_when_nothing_close():
+    assert follow_up_suggestions([]) == FALLBACK_SUGGESTIONS[:3]
+    assert follow_up_suggestions([{"title": ""}, {"title": "   "}]) == FALLBACK_SUGGESTIONS[:3]
 
 
 def test_splitter_markers_preserved_for_chat_generators():

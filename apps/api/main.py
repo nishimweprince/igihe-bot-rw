@@ -27,9 +27,9 @@ from igihe_assistant.observability import metrics
 from igihe_assistant.pipeline import build_index
 from igihe_assistant.prompting.builder import (
     NO_CLOSE_MATCH_RW,
-    NO_CLOSE_MATCH_SUGGESTIONS,
     NO_EVIDENCE_RW,
     build_prompt,
+    follow_up_suggestions,
 )
 from igihe_assistant.retrieval.hybrid import group_near_duplicates, retrieve
 
@@ -193,12 +193,12 @@ def _closest_sources(message: str, filters: dict) -> list[dict]:
     return sources
 
 
-def _no_evidence(message: str, filters: dict) -> tuple[str, list[dict]]:
-    """Refusal with disclaimed near matches, or a suggested prompt if none."""
+def _no_evidence(message: str, filters: dict) -> tuple[str, list[dict], list[str]]:
+    """Refusal with disclaimed near matches, plus sendable follow-ups."""
     closest = _closest_sources(message, filters)
     if closest:
-        return NO_EVIDENCE_RW, closest
-    return NO_CLOSE_MATCH_RW, []
+        return NO_EVIDENCE_RW, closest, follow_up_suggestions(closest)
+    return NO_CLOSE_MATCH_RW, [], follow_up_suggestions([])
 
 
 def answer_question(
@@ -206,7 +206,7 @@ def answer_question(
     filters: dict,
     article_id: int | None = None,
     session_id: str = "?",
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], list[str]]:
     t0 = time.perf_counter()
     st = get_state()
     backend, by_id = st["backend"], st["by_id"]
@@ -345,7 +345,7 @@ def answer_question(
             reason,
             _preview(text),
         )
-        return NO_EVIDENCE_RW, []
+        return _no_evidence(message, filters)
     log.info(
         "chat.answer session=%s model=%s sources=%d output_chars=%d "
         "latency_ms=%d",
@@ -355,7 +355,7 @@ def answer_question(
         len(text),
         int((time.perf_counter() - t0) * 1000),
     )
-    return text, sources
+    return text, sources, []
 
 
 @app.get("/health/live")
@@ -424,7 +424,7 @@ async def chat(req: ChatRequest, request: Request):
     async def stream():
         yield 'event: retrieval\ndata: {"status": "searching"}\n\n'
         async with semaphore:
-            text, sources = answer_question(
+            text, sources, suggestions = answer_question(
                 req.message, filt, req.article_id, session_id=req.session_id
             )
         metrics.incr("requests.chat")
@@ -446,10 +446,10 @@ async def chat(req: ChatRequest, request: Request):
             for s in sources
         ]
         yield f"event: sources\ndata: {json.dumps(pub)}\n\n"
-        if text == NO_CLOSE_MATCH_RW:
+        if suggestions:
             yield (
                 "event: suggestions\ndata: "
-                + json.dumps({"suggestions": NO_CLOSE_MATCH_SUGGESTIONS})
+                + json.dumps({"suggestions": suggestions})
                 + "\n\n"
             )
         yield (

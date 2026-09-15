@@ -25,7 +25,7 @@ def _events(resp):
 
 
 def test_latest_news_without_lexical_support_refuses():
-    text, sources = api.answer_question("Ni izihe nkuru zigezweho?", {})
+    text, sources, _suggestions = api.answer_question("Ni izihe nkuru zigezweho?", {})
     assert "nta bimenyetso" in text.lower()
     assert "[1]" not in text
     assert sources, "refusal must still attach disclaimed near matches"
@@ -42,7 +42,7 @@ def test_latest_news_refusal_over_sse():
 
 
 def test_latest_news_with_support_returns_cited_answer():
-    text, sources = api.answer_question("Mbwira inkuru ziheruka", {})
+    text, sources, _suggestions = api.answer_question("Mbwira inkuru ziheruka", {})
     assert sources, "expected relevance-ranked sources, not a refusal"
     assert "[1]" in text
     assert [s["n"] for s in sources] == list(range(1, len(sources) + 1))
@@ -63,5 +63,5 @@ def test_latest_news_over_sse_has_sources_and_model():
 
 @pytest.mark.xfail(reason="retrieval is relevance-ranked; no recency ordering yet")
 def test_latest_news_is_recency_ordered():
-    _, sources = api.answer_question("Mbwira inkuru ziheruka", {})
+    _, sources, _ = api.answer_question("Mbwira inkuru ziheruka", {})
     assert sources[0]["wp_id"] == NEWEST_FIXTURE_ID

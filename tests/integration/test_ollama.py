@@ -23,5 +23,5 @@ def test_generator_failure_falls_back_to_fake(monkeypatch):
             raise RuntimeError("model down")
 
     monkeypatch.setattr(api, "generator", Boom())
-    text, _ = api.answer_question("Amazi meza i Kigali?", {})
+    text, _, _ = api.answer_question("Amazi meza i Kigali?", {})
     assert "[1]" in text or "nta bimenyetso" in text.lower()

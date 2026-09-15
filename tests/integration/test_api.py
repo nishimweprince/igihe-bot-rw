@@ -51,7 +51,7 @@ def test_realistic_unanswerable_with_shared_function_words_refuses():
 
 
 def test_no_evidence_points_to_origin_and_disclaims_close_matches():
-    text, sources = api.answer_question("xyzzy blorpt quux nabi?", {})
+    text, sources, _suggestions = api.answer_question("xyzzy blorpt quux nabi?", {})
     assert "—" not in text
     low = text.lower()
     assert "nta bimenyetso" in low
@@ -67,7 +67,7 @@ def test_no_evidence_points_to_origin_and_disclaims_close_matches():
 
 
 def test_no_close_match_suggests_another_prompt():
-    text, sources = api.answer_question(
+    text, sources, suggestions = api.answer_question(
         "xyzzy blorpt quux nabi?",
         {
             "published_after": "2999-01-01",
@@ -77,7 +77,10 @@ def test_no_close_match_suggests_another_prompt():
     )
     assert sources == []
     assert "—" not in text
-    assert "Mbwira inkuru ziheruka" in text
+    # Chips carry the invitation now; the prose must not restate it.
+    assert "Mbwira inkuru ziheruka." not in text
+    assert suggestions
+    assert "Mbwira inkuru ziheruka." in suggestions
 
 
 def test_no_close_match_streams_sendable_suggestions():
@@ -96,6 +99,19 @@ def test_no_close_match_streams_sendable_suggestions():
     assert resp.status_code == 200
     assert "event: suggestions" in resp.text
     assert "Mbwira inkuru ziheruka" in resp.text
+
+
+def test_near_match_refusal_streams_headline_suggestions():
+    _text, sources, suggestions = api.answer_question("xyzzy blorpt quux nabi?", {})
+    assert sources, "expected closest articles alongside the refusal"
+    assert suggestions, "near-match refusal must carry follow-up prompts"
+    assert sources[0]["title"] in suggestions
+    resp = client.post(
+        "/v1/chat", json={"session_id": "t-sugg-near", "message": "xyzzy blorpt quux nabi?"}
+    )
+    assert resp.status_code == 200
+    assert "event: suggestions" in resp.text
+    assert sources[0]["title"] in resp.text
 
 
 def test_oversized_rejected():
@@ -129,9 +145,9 @@ def test_citationless_answer_replaced_with_refusal(monkeypatch):
             return "Al Hilal yatsinze umukino."
 
     monkeypatch.setattr(api, "generator", NoCite())
-    text, sources = api.answer_question("APR yatsinze Rayon gute?", {})
-    assert sources == []
+    text, sources, suggestions = api.answer_question("APR yatsinze Rayon gute?", {})
     assert "nta bimenyetso" in text.lower()
+    assert suggestions, "validation-failure refusal must carry follow-up prompts"
 
 
 def test_feedback_recorded():

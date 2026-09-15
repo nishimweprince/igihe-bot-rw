@@ -356,7 +356,7 @@ export function suggestionsFromData(data: unknown): string[] {
   const out: string[] = [];
   for (const item of raw) {
     if (typeof item !== "string") continue;
-    const q = item.trim();
+    const q = decodeEntities(item).trim();
     if (q && !out.includes(q)) out.push(q);
     if (out.length >= 3) break;
   }
