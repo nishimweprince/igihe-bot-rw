@@ -50,9 +50,49 @@ class HttpxTransport:
         return HttpxResponse(resp.json(), dict(resp.headers))
 
 
+def fetch_pages(client, per_page, start_page, pages, pages_dir, gap=1.0):
+    """Fetch listing pages to disk. `pages=0` keeps going until a short page.
+
+    Returns (posts, wp_total). File per page makes reruns resumable via
+    --start-page; the polite gap applies between requests.
+    """
+    posts: list[dict] = []
+    wp_total: str | None = None
+    page = start_page
+    fetched = 0
+    while True:
+        if pages > 0 and fetched >= pages:
+            break
+        items, headers = client.fetch_posts(page, per_page, "date", "desc")
+        lowered = {k.lower(): v for k, v in headers.items()}
+        wp_total = lowered.get("x-wp-total", wp_total)
+        (pages_dir / f"page-{page}.json").write_text(
+            json.dumps(items, ensure_ascii=False), encoding="utf-8"
+        )
+        posts.extend(items)
+        fetched += 1
+        print(f"page {page}: {len(items)} posts (wp-total={wp_total})", flush=True)
+        if pages == 0 and len(items) < per_page:
+            break
+        page += 1
+        time.sleep(gap)
+    return posts, wp_total
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pages", type=int, default=3)
+    ap.add_argument(
+        "--pages",
+        type=int,
+        default=3,
+        help="Pages to fetch; 0 = all, stopping at the first short page.",
+    )
+    ap.add_argument(
+        "--start-page",
+        type=int,
+        default=1,
+        help="First page to fetch (resume a long run without refetching).",
+    )
     ap.add_argument("--per-page", type=int, default=100)
     ap.add_argument("--out", default="data/live-sample")
     ap.add_argument("--base-url", default="https://old.igihe.com")
@@ -66,18 +106,9 @@ def main() -> None:
     out = Path(args.out)
     (out / "pages").mkdir(parents=True, exist_ok=True)
     client = WordPressClient(args.base_url, HttpxTransport(args.user_agent))
-    posts: list[dict] = []
-    wp_total: str | None = None
-    for page in range(1, args.pages + 1):
-        items, headers = client.fetch_posts(page, args.per_page, "date", "desc")
-        lowered = {k.lower(): v for k, v in headers.items()}
-        wp_total = lowered.get("x-wp-total", wp_total)
-        (out / "pages" / f"page-{page}.json").write_text(
-            json.dumps(items, ensure_ascii=False), encoding="utf-8"
-        )
-        posts.extend(items)
-        print(f"page {page}: {len(items)} posts (wp-total={wp_total})", flush=True)
-        time.sleep(1.0)  # polite gap between pages
+    posts, wp_total = fetch_pages(
+        client, args.per_page, args.start_page, args.pages, out / "pages"
+    )
 
     result = ingest_posts(posts, out)
     ok = quarantined = 0

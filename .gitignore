@@ -7,7 +7,6 @@ dist/
 node_modules/
 apps/demo-web/.next/
 models/
-tests/
 
 # Agents
 .claude/
