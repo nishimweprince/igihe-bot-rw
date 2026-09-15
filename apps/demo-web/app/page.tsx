@@ -75,6 +75,13 @@ import { parseBlocks, plainText, type Inline } from "../lib/format";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/* Shared dialog button base (ghost / danger / primary differ only in paint). */
+const BTN_BASE =
+  "inline-flex min-h-[40px] items-center justify-center gap-[8px] rounded-full border px-[18px] text-[0.875rem] font-medium whitespace-nowrap transition-colors duration-150 ease-app [&_svg]:size-[15px]";
+const BTN_GHOST = `${BTN_BASE} border-line-strong bg-transparent text-ink hover:bg-hover`;
+const BTN_DANGER = `${BTN_BASE} border-transparent bg-danger text-white hover:opacity-[0.88]`;
+const BTN_PRIMARY = `${BTN_BASE} border-transparent bg-btn text-btn-fg hover:opacity-[0.85]`;
+
 /* ---------- Composer ---------- */
 
 function Composer({
@@ -82,11 +89,13 @@ function Composer({
   autoFocus,
   onSend,
   onStop,
+  className = "mx-auto w-[min(var(--content-w),100%)]",
 }: {
   busy: boolean;
   autoFocus?: boolean;
   onSend: (message: string) => boolean;
   onStop: () => void;
+  className?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const [hasText, setHasText] = useState(false);
@@ -119,8 +128,8 @@ function Composer({
   }
 
   return (
-    <form className="composer" onSubmit={submit}>
-      <div className="composer-box">
+    <form className={className} onSubmit={submit}>
+      <div className="flex items-end gap-[8px] rounded-[28px] border border-line bg-canvas py-[9px] pr-[9px] pl-[20px] shadow-composer transition-all duration-200 ease-app focus-within:border-line-strong focus-within:shadow-composer-focus max-[768px]:rounded-[24px] max-[768px]:py-[7px] max-[768px]:pr-[7px] max-[768px]:pl-[16px]">
         <textarea
           ref={ref}
           rows={1}
@@ -133,14 +142,15 @@ function Composer({
           onKeyDown={onKeyDown}
           placeholder="Baza ikibazo"
           aria-label="Andika ikibazo cyawe"
+          className="max-h-[200px] min-h-[38px] flex-1 resize-none border-0 bg-transparent px-0 py-[7px] text-[1rem] leading-[1.5] outline-none placeholder:text-ink-faint max-[768px]:min-h-[36px] max-[768px]:py-[6px] max-[768px]:text-[0.95rem]"
         />
         {busy ? (
-          <button type="button" className="composer-action stop" onClick={onStop} aria-label="Hagarika">
-            <Square fill="currentColor" aria-hidden="true" />
+          <button type="button" className="inline-flex size-[38px] shrink-0 items-center justify-center rounded-full border-0 bg-btn text-[0.72rem] text-btn-fg transition-all duration-150 ease-app hover:opacity-80 active:scale-95 disabled:cursor-default disabled:bg-btn-disabled max-[768px]:size-[36px]" onClick={onStop} aria-label="Hagarika">
+            <Square fill="currentColor" aria-hidden="true" className="size-[12px]" />
           </button>
         ) : (
-          <button type="submit" className="composer-action send" disabled={!hasText} aria-label="Ohereza">
-            <ArrowUp aria-hidden="true" />
+          <button type="submit" className="inline-flex size-[38px] shrink-0 items-center justify-center rounded-full border-0 bg-btn text-[0.95rem] text-btn-fg transition-all duration-150 ease-app hover:opacity-80 active:scale-95 disabled:cursor-default disabled:bg-btn-disabled max-[768px]:size-[36px]" disabled={!hasText} aria-label="Ohereza">
+            <ArrowUp aria-hidden="true" className="size-[18px] shrink-0" />
           </button>
         )}
       </div>
@@ -150,16 +160,25 @@ function Composer({
 
 /* ---------- Answer rendering ---------- */
 
+const CITE_CLASSES =
+  "ml-[3px] inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-chip px-[4px] align-[2px] text-[0.68rem] font-semibold leading-none text-ink-soft no-underline transition-colors duration-150 ease-app";
+
 function Cite({ n, source }: { n: number; source?: Source }) {
   if (!source) {
     return (
-      <span className="cite cite-pending" aria-label={`Inkomoko ${n}`}>
+      <span className={`${CITE_CLASSES} opacity-60`} aria-label={`Inkomoko ${n}`}>
         {n}
       </span>
     );
   }
   return (
-    <a className="cite" href={source.url} target="_blank" rel="noreferrer" title={source.title}>
+    <a
+      className={`${CITE_CLASSES} ml-[3px] hover:bg-brand-soft hover:text-brand focus-visible:bg-brand-soft focus-visible:text-brand focus-visible:outline-offset-[1px]`}
+      href={source.url}
+      target="_blank"
+      rel="noreferrer"
+      title={source.title}
+    >
       {n}
     </a>
   );
@@ -197,7 +216,9 @@ function Prose({ text, sources, streaming }: { text: string; sources: Source[]; 
     <div className="prose">
       {blocks.map((block, i) => {
         const last = i === blocks.length - 1;
-        const cursor = streaming && last ? <span className="cursor" aria-hidden="true" /> : null;
+        const cursor = streaming && last ? (
+          <span className="ml-[6px] inline-block size-[10px] animate-throb rounded-full bg-ink align-[-1px]" aria-hidden="true" />
+        ) : null;
         if (block.kind === "p") {
           return (
             <p key={i}>
@@ -224,27 +245,27 @@ function Prose({ text, sources, streaming }: { text: string; sources: Source[]; 
 
 function StatusLine({ text }: { text: string }) {
   return (
-    <div className="status-line" role="status">
-      <span className="status-dot" aria-hidden="true" />
-      <span className="status-text">{text}</span>
+    <div className="flex min-h-[27px] items-center gap-[10px] text-[1rem] leading-[1.7] max-[768px]:text-[0.95rem]" role="status">
+      <span className="size-[10px] animate-throb rounded-full bg-ink" aria-hidden="true" />
+      <span className="shimmer-text animate-shimmer bg-[linear-gradient(90deg,var(--color-ink-faint)_0%,var(--color-ink)_50%,var(--color-ink-faint)_100%)] bg-[length:200%_100%] bg-clip-text text-transparent text-ink-soft">{text}</span>
     </div>
   );
 }
 
 function Sources({ sources }: { sources: Source[] }) {
   return (
-    <section className="sources" aria-label="Inkomoko">
-      <h3 className="sources-title">Inkomoko</h3>
-      <ol className="sources-list">
+    <section className="mt-[16px]" aria-label="Inkomoko">
+      <h3 className="m-0 mb-[8px] text-[0.8rem] font-semibold text-ink-soft">Inkomoko</h3>
+      <ol className="m-0 flex list-none flex-wrap gap-[8px] p-0">
         {sources.map((s) => (
-          <li key={s.n}>
-            <a className="source-card" href={s.url} target="_blank" rel="noreferrer">
-              <span className="source-n" aria-hidden="true">
+          <li key={s.n} className="max-w-full flex-[1_1_280px] max-[768px]:basis-full">
+            <a className="group flex h-full items-start gap-[10px] rounded-[12px] border border-line bg-sidebar px-[12px] py-[10px] text-ink no-underline transition-colors duration-150 ease-app hover:border-line-strong hover:bg-hover" href={s.url} target="_blank" rel="noreferrer">
+              <span className="mt-[1px] inline-flex size-[20px] shrink-0 items-center justify-center rounded-full bg-chip text-[0.68rem] font-semibold text-ink-soft group-hover:bg-brand-soft group-hover:text-brand" aria-hidden="true">
                 {s.n}
               </span>
-              <span className="source-body">
-                <span className="source-title">{s.title}</span>
-                <span className="source-meta">
+              <span className="flex min-w-0 flex-col gap-[2px]">
+                <span className="line-clamp-2 text-[0.84rem] font-medium leading-[1.35]">{s.title}</span>
+                <span className="text-[0.72rem] text-ink-faint">
                   igihe.com · {formatSourceDate(s.published_at)}
                 </span>
               </span>
@@ -273,8 +294,8 @@ function CopyButton({ message }: { message: Message }) {
     }
   }
   return (
-    <button type="button" className="icon-btn action" onClick={copy} aria-label={copied ? "Byakoporowe" : "Koporora"}>
-      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    <button type="button" className="inline-flex size-[30px] items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-[0.82rem] text-ink-soft transition-colors duration-150 ease-app hover:bg-hover hover:text-ink" onClick={copy} aria-label={copied ? "Byakoporowe" : "Koporora"}>
+      {copied ? <Check aria-hidden="true" className="size-[18px] shrink-0" /> : <Copy aria-hidden="true" className="size-[18px] shrink-0" />}
     </button>
   );
 }
@@ -283,14 +304,17 @@ function SuggestionList({
   items, label, onPick, className = "",
 }: { items: string[]; label?: string; onPick: (q: string) => void; className?: string }) {
   if (!items.length) return null;
+  // The labelled in-turn group sits under the refusal with left-aligned,
+  // staggered chips; the welcome group stays centered without a label.
+  const inTurn = className.includes("in-turn");
   return (
-    <div className={`suggestion-group ${className}`}>
-      {label ? <p className="suggestions-label">{label}</p> : null}
-      <ul className={`suggestions`} aria-label="Ingero z'ibibazo">
+    <div className={className}>
+      {label ? <p className="m-0 mb-[8px] text-[0.7rem] font-semibold tracking-[0.08em] text-ink-faint uppercase">{label}</p> : null}
+      <ul className={`m-0 flex list-none flex-wrap gap-[8px] p-0 ${inTurn ? "items-start justify-start" : "mt-[18px] justify-center"}`} aria-label="Ingero z'ibibazo">
         {items.map((q, i) => (
-          <li key={q} style={{ "--i": i } as CSSProperties}>
-            <button type="button" className="suggestion" onClick={() => onPick(q)}>
-              <Search className="suggestion-icon" aria-hidden="true" />
+          <li key={q} style={{ "--i": i } as CSSProperties} className={inTurn ? "animate-rise-chip [animation-delay:calc(var(--i,0)*60ms)]" : undefined}>
+            <button type="button" className="group inline-flex max-w-[min(100%,44ch)] items-center gap-[7px] rounded-full border border-line bg-transparent px-[14px] py-[8px] text-left text-[0.84rem] leading-[1.3] text-ink-soft transition-colors duration-150 ease-app hover:border-hover hover:bg-hover hover:text-ink focus-visible:border-hover" onClick={() => onPick(q)}>
+              <Search className="size-[14px] shrink-0 text-ink-faint transition-colors duration-150 ease-app group-hover:text-brand group-focus-visible:text-brand" aria-hidden="true" />
               <span>{q}</span>
             </button>
           </li>
@@ -312,9 +336,10 @@ function AssistantTurn({
   onSuggest: (question: string) => void;
 }) {
   const waiting = streaming && !message.content;
-  const tone = message.error ? " error" : message.muted ? " muted" : "";
+  // Error/muted tones inherit into the prose, which sets no color of its own.
+  const tone = message.error ? "text-danger" : message.muted ? "text-ink-faint italic" : "";
   return (
-    <article className={`turn assistant${tone}`}>
+    <article className={`group mb-[28px] animate-rise py-[2px] ${tone} max-[768px]:mb-[22px]`}>
       {waiting ? (
         <StatusLine text={status} />
       ) : (
@@ -325,11 +350,38 @@ function AssistantTurn({
         <SuggestionList items={message.suggestions ?? []} label="Gerageza kimwe muri ibi" onPick={onSuggest} className="in-turn mt-[14px]" />
       ) : null}
       {!streaming && message.content && !message.error && !message.muted ? (
-        <div className="turn-actions">
+        <div className="mt-[6px] ml-[-8px] flex gap-[2px] opacity-0 transition-opacity duration-150 ease-app group-hover:opacity-100 group-focus-within:opacity-100 max-[768px]:opacity-100">
           <CopyButton message={message} />
         </div>
       ) : null}
     </article>
+  );
+}
+
+/* Token usage ledger: newsroom-ruled table, tabular numerals. */
+function UsageTable({ caption, rows }: { caption: string; rows: [string, string][] }) {
+  const last = rows.length - 1;
+  return (
+    <table className="mb-[16px] w-full border-collapse tabular-nums">
+      <caption className="pb-[6px] text-left text-[0.78rem] font-semibold text-ink">{caption}</caption>
+      <tbody>
+        {rows.map(([label, value], i) => (
+          <tr
+            key={label}
+            className={
+              i === last
+                ? "font-semibold text-ink [&_td]:border-t [&_td]:border-line-strong [&_td]:border-b-2 [&_td]:border-b-brand [&_th]:border-t [&_th]:border-line-strong [&_th]:border-b-2 [&_th]:border-b-brand"
+                : "[&_td]:border-t [&_td]:border-line [&_th]:border-t [&_th]:border-line"
+            }
+          >
+            <th scope="row" className={`px-[2px] py-[7px] text-left text-[0.85rem] text-ink-soft${i === last ? " font-semibold" : " font-normal"}`}>
+              {label}
+            </th>
+            <td className="px-[2px] py-[7px] text-right text-[0.85rem] text-ink">{value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -340,15 +392,19 @@ function IconButton({
   icon: Icon,
   onClick,
   className = "",
+  buttonClassName = "size-[36px] rounded-[8px]",
+  iconClassName = "size-[18px] shrink-0",
 }: {
   label: string;
   icon: LucideIcon;
   onClick: () => void;
   className?: string;
+  buttonClassName?: string;
+  iconClassName?: string;
 }) {
   return (
-    <button type="button" className={`icon-btn ${className}`} aria-label={label} title={label} onClick={onClick}>
-      <Icon aria-hidden="true" />
+    <button type="button" className={`inline-flex shrink-0 items-center justify-center border-0 bg-transparent p-0 text-ink-soft transition-colors duration-150 ease-app hover:bg-hover hover:text-ink ${buttonClassName} ${className}`} aria-label={label} title={label} onClick={onClick}>
+      <Icon aria-hidden="true" className={iconClassName} />
     </button>
   );
 }
@@ -519,58 +575,67 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const composer = (props: { autoFocus?: boolean }) => (
-    <Composer busy={busy} onSend={send} onStop={stop} autoFocus={props.autoFocus} />
+  const composer = (props: { autoFocus?: boolean; className?: string }) => (
+    <Composer busy={busy} onSend={send} onStop={stop} autoFocus={props.autoFocus} className={props.className} />
   );
 
   const footnote: ReactNode = (
-    <p className="footnote">Umufasha ashobora kwibeshya. Genzura amakuru mu nkuru za IGIHE.</p>
+    <p className="mx-auto mt-[10px] w-[min(var(--content-w),100%)] text-center text-[0.72rem] leading-[1.4] text-ink-faint">Umufasha ashobora kwibeshya. Genzura amakuru mu nkuru za IGIHE.</p>
   );
 
   return (
-    <div className={`shell${collapsed ? " collapsed" : ""}`}>
+    <div className="flex h-dvh overflow-hidden bg-canvas">
       {drawerOpen ? (
-        <button type="button" className="backdrop" aria-label="Funga urutonde rw'ibiganiro" onClick={() => setDrawerOpen(false)} />
+        <button type="button" className="fixed inset-0 z-20 animate-fade border-0 bg-black/40 p-0 min-[769px]:hidden" aria-label="Funga urutonde rw'ibiganiro" onClick={() => setDrawerOpen(false)} />
       ) : null}
 
-      <aside className={`sidebar${drawerOpen ? " open" : ""}`} aria-label="Ibiganiro">
-        <div className="sidebar-inner">
-          <div className="sidebar-head">
-            <span className="brand">
-              IGIHE<span className="brand-dot" aria-hidden="true" />
+      <aside
+        className={`w-(--sidebar-w) shrink-0 overflow-hidden bg-sidebar transition-[width] duration-[250ms] ease-app max-[768px]:fixed max-[768px]:inset-y-0 max-[768px]:left-0 max-[768px]:z-30 max-[768px]:h-dvh max-[768px]:shadow-[0_0_40px_rgba(0,0,0,0.2)] max-[768px]:transition-transform ${collapsed ? "min-[769px]:w-0" : ""} ${drawerOpen ? "max-[768px]:translate-x-0" : "max-[768px]:-translate-x-full"}`}
+        aria-label="Ibiganiro"
+      >
+        <div className="flex h-full w-(--sidebar-w) flex-col p-[8px]">
+          <div className="mb-[4px] flex h-[44px] items-center justify-between pr-[4px] pl-[10px]">
+            <span className="inline-flex items-baseline text-[0.8rem] font-bold tracking-[0.14em] text-ink">
+              IGIHE<span className="ml-[2px] size-[6px] rounded-full bg-brand" aria-hidden="true" />
             </span>
-            <IconButton label="Hisha urutonde rw'ibiganiro" icon={PanelLeftClose} className="only-desktop" onClick={() => setCollapsed(true)} />
-            <IconButton label="Funga" icon={X} className="only-mobile" onClick={() => setDrawerOpen(false)} />
+            <IconButton label="Hisha urutonde rw'ibiganiro" icon={PanelLeftClose} className="max-[768px]:hidden" onClick={() => setCollapsed(true)} />
+            <IconButton
+              label="Funga"
+              icon={X}
+              className="max-[768px]:inline-flex min-[769px]:hidden"
+              onClick={() => setDrawerOpen(false)}
+            />
+      
           </div>
 
-          <button type="button" className="sidebar-row new-chat" onClick={onNewChat}>
+          <button type="button" className="mb-[12px] flex min-h-[36px] w-full items-center gap-[10px] rounded-[10px] border-0 bg-transparent px-[10px] py-[8px] text-left text-[0.875rem] font-medium text-ink transition-colors duration-150 ease-app hover:bg-hover [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-ink-soft" onClick={onNewChat}>
             <SquarePen aria-hidden="true" />
             <span>{NEW_CHAT_TITLE}</span>
           </button>
 
-          <nav className="history">
+          <nav className="min-h-0 flex-1 space-y-[12px] overflow-y-auto pb-[8px]">
             {groups.length === 0 ? (
-              <p className="history-empty">Ibiganiro byawe bizagaragara hano.</p>
+              <p className="m-0 px-[10px] py-[8px] text-[0.8rem] leading-[1.5] text-ink-faint">Ibiganiro byawe bizagaragara hano.</p>
             ) : (
               groups.map((g) => (
-                <div className="history-group" key={g.label}>
-                  <h2 className="history-label">{g.label}</h2>
+                <div key={g.label}>
+                  <h2 className="m-0 px-[10px] pt-[8px] pb-[4px] text-[0.72rem] font-semibold text-ink-faint">{g.label}</h2>
                   {g.items.map((c) => (
-                    <div className="history-item-row" key={c.id}>
+                    <div className="group/row relative flex w-full items-center rounded-[10px] transition-colors duration-150 ease-app has-[.active]:bg-active hover:bg-hover focus-within:bg-hover has-[[data-state=open]]:bg-hover" key={c.id}>
                       <button
                         type="button"
-                        className={`sidebar-row history-item${c.id === state.activeId ? " active" : ""}`}
+                        className={`min-w-0 flex-1 border-0 bg-transparent px-[10px] py-[8px] pr-[10px] text-left text-[0.875rem] text-ink transition-all duration-150 ease-app group-hover/row:pr-[32px] group-focus-within/row:pr-[32px] group-has-[[data-state=open]]/row:pr-[32px] max-[768px]:pr-[32px]${c.id === state.activeId ? " active" : ""}`}
                         aria-current={c.id === state.activeId ? "page" : undefined}
                         onClick={() => onSelect(c.id)}
                       >
-                        <span className="history-title">{c.title}</span>
+                        <span className="block overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]">{c.title}</span>
                       </button>
-                      <div className="history-actions">
+                      <div className="absolute top-1/2 right-[6px] flex -translate-y-1/2 items-center opacity-0 transition-opacity duration-150 ease-app group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-has-[[data-state=open]]/row:opacity-100 max-[768px]:opacity-100">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="icon-btn"
+                              className="inline-flex size-[24px] shrink-0 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-ink-soft transition-colors duration-150 ease-app hover:bg-transparent hover:text-ink [&_svg]:size-4 [&_svg]:shrink-0"
                               aria-label="Amahitamo y'ikiganiro"
                               title="Amahitamo"
                             >
@@ -582,7 +647,7 @@ export default function Home() {
                               <Share2 aria-hidden="true" />
                               <span>Sangiza ikiganiro</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => openDelete(c.id)} className="danger">
+                            <DropdownMenuItem onSelect={() => openDelete(c.id)} className="text-danger data-[highlighted]:bg-danger-soft [&_svg]:text-danger">
                               <Trash2 aria-hidden="true" />
                               <span>Siba ikiganiro</span>
                             </DropdownMenuItem>
@@ -596,14 +661,14 @@ export default function Home() {
             )}
           </nav>
 
-          <div className="sidebar-foot">
+          <div className="border-t border-line px-[10px] pt-[12px] pb-[6px] text-center text-[0.72rem] text-ink-faint">
             Inkuru za IGIHE · demo
             <br />
             Ibiganiro bibikwa kuri iki gikoresho gusa
             <br />
             <button
               type="button"
-              className="foot-link"
+              className="mt-[4px] border-0 bg-transparent p-0 text-[0.72rem] text-ink-soft underline underline-offset-[2px] hover:text-ink"
               onClick={() => setModal({ type: "usage", id: state.activeId })}
               aria-label="Reba ikoreshwa rya tokens"
             >
@@ -613,41 +678,41 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="main">
-        <header className="topbar">
-          <IconButton label="Fungura urutonde rw'ibiganiro" icon={Menu} className="only-mobile" onClick={() => setDrawerOpen(true)} />
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        <header className="flex h-(--topbar-h) shrink-0 items-center gap-[6px] px-[12px] max-[768px]:border-b max-[768px]:border-line max-[768px]:px-[8px]">
+          <IconButton label="Fungura urutonde rw'ibiganiro" icon={Menu} className="min-[769px]:hidden" onClick={() => setDrawerOpen(true)} />
           <IconButton
             label="Erekana urutonde rw'ibiganiro"
             icon={Menu}
-            className="only-desktop topbar-expand"
+            className={`max-[768px]:hidden${collapsed ? "" : " min-[769px]:hidden"}`}
             onClick={() => setCollapsed(false)}
           />
-          <span className="topbar-title">
+          <span className="inline-flex items-center gap-[8px] truncate px-[6px] text-[0.95rem] font-semibold tracking-[-0.01em] text-ink max-[768px]:flex-1 max-[768px]:justify-center max-[768px]:text-[0.9rem]">
             IGIHE News Assistant
-            <span className="badge">Demo</span>
+            <span className="rounded-full bg-chip px-[7px] py-[2px] text-[0.64rem] font-semibold tracking-[0.06em] text-ink-soft uppercase">Demo</span>
           </span>
-          <IconButton label={NEW_CHAT_TITLE} icon={SquarePen} className="topbar-new" onClick={onNewChat} />
+          <IconButton label={NEW_CHAT_TITLE} icon={SquarePen} className={`ml-auto${collapsed ? "" : " min-[769px]:hidden"}`} onClick={onNewChat} />
         </header>
 
         {empty ? (
-          <div className="welcome">
-            <div className="welcome-inner">
-              <h1 className="welcome-title">Nagufasha iki uyu munsi?</h1>
-              <p className="welcome-sub">Baza mu Kinyarwanda ikibazo cyose ku nkuru za IGIHE.</p>
-              {composer({ autoFocus: true })}
+          <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-[16px] pb-[12px]">
+            <div className="my-auto flex w-[min(var(--content-w),100%)] animate-rise-slow flex-col items-center pb-[8vh] max-[768px]:pb-[4vh]">
+              <h1 className="m-0 mb-[6px] text-center text-[clamp(1.5rem,3vw,1.85rem)] leading-[1.25] font-semibold tracking-[-0.02em]">Nagufasha iki uyu munsi?</h1>
+              <p className="m-0 mb-[28px] text-center text-[0.95rem] text-ink-soft max-[768px]:mb-[20px]">Baza mu Kinyarwanda ikibazo cyose ku nkuru za IGIHE.</p>
+              {composer({ autoFocus: true, className: "w-full" })}
               <SuggestionList items={suggestions} onPick={send} />
             </div>
             {footnote}
           </div>
         ) : (
           <>
-            <div className="thread" ref={threadRef} onScroll={onThreadScroll}>
-              <div className="thread-inner" role="log" aria-live="polite">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" ref={threadRef} onScroll={onThreadScroll}>
+              <div className="mx-auto w-[min(var(--content-w),100%)] px-[16px] pt-[16px] pb-[24px] max-[768px]:px-[14px] max-[768px]:pt-[12px] max-[768px]:pb-[20px]" role="log" aria-live="polite">
                 {messages.map((m, i) => {
                   const streamingThis = m.role === "assistant" && busy && i === messages.length - 1;
                   return m.role === "user" ? (
-                    <article key={m.id} className="turn user">
-                      <div className="user-bubble">{m.content}</div>
+                    <article key={m.id} className="group mb-[28px] flex animate-rise justify-end max-[768px]:mb-[22px]">
+                      <div className="max-w-[70%] rounded-[18px] bg-bubble px-[16px] py-[10px] text-[1rem] leading-[1.6] whitespace-pre-wrap text-ink [overflow-wrap:anywhere] max-[768px]:max-w-[85%] max-[768px]:text-[0.95rem]">{m.content}</div>
                     </article>
                   ) : (
                     <AssistantTurn key={m.id} message={m} streaming={streamingThis} status={state.status} onSuggest={send} />
@@ -655,7 +720,7 @@ export default function Home() {
                 })}
               </div>
             </div>
-            <div className="dock">
+            <div className="shrink-0 bg-canvas px-[16px] pt-[6px] pb-[10px] max-[768px]:px-[12px] max-[768px]:pb-[8px]">
               {composer({ autoFocus: true })}
               {footnote}
             </div>
@@ -678,11 +743,11 @@ export default function Home() {
           </DialogDescription>
           <DialogFooter>
             <DialogClose asChild>
-              <button type="button" className="btn-ghost">
+              <button type="button" className={BTN_GHOST}>
                 Reka
               </button>
             </DialogClose>
-            <button type="button" className="btn-danger" onClick={confirmDelete} autoFocus>
+            <button type="button" className={BTN_DANGER} onClick={confirmDelete} autoFocus>
               Siba
             </button>
           </DialogFooter>
@@ -695,18 +760,18 @@ export default function Home() {
           <DialogDescription>
             Umuntu wese ufite iri huza ashobora kubona iki kiganiro.
           </DialogDescription>
-          <div className="share-link-row">
+          <div className="mb-[20px] flex gap-[8px]">
             <input
-              className="share-link-input"
+              className="min-h-[40px] min-w-0 flex-1 rounded-full border border-line-strong bg-sidebar px-[16px] text-[0.8rem] text-ink-soft text-ellipsis focus:border-ink-faint focus:text-ink focus:outline-none"
               readOnly
               value={modal?.link ?? ""}
               aria-label="Ihuza ryo gusangiza"
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button type="button" className="btn-primary" onClick={copyShareLink}>
+            <button type="button" className={BTN_PRIMARY} onClick={copyShareLink}>
               {linkCopied ? (
                 <>
-                  <Check aria-hidden="true" /> Ryakoporowe
+                  <Check aria-hidden="true" className="size-[15px]" /> Ryakoporowe
                 </>
               ) : (
                 "Koporora ihuza"
@@ -715,7 +780,7 @@ export default function Home() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <button type="button" className="btn-ghost">
+              <button type="button" className={BTN_GHOST}>
                 Funga
               </button>
             </DialogClose>
@@ -729,51 +794,33 @@ export default function Home() {
           <DialogDescription>
             Ibibarwa ni igereranya (~), si fagitire. Bara inyuguti / 4 kuri buri butumwa.
           </DialogDescription>
-          <div className="usage">
-            <p className="usage-model">
-              Model: <span className="usage-model-name">{usageModel}</span>
+          <div className="mb-[20px]">
+            <p className="m-0 mb-[12px] text-[0.8rem] text-ink-soft">
+              Model: <span className="break-all text-ink tabular-nums">{usageModel}</span>
             </p>
-            <table className="usage-table">
-              <caption className="usage-caption">Iki kiganiro</caption>
-              <tbody>
-                <tr>
-                  <th scope="row">Ibyoherejwe (injyana)</th>
-                  <td>~{usageActive?.inputTokens ?? 0}</td>
-                </tr>
-                <tr>
-                  <th scope="row">Ibyakiriwe (insubizo)</th>
-                  <td>~{usageActive?.outputTokens ?? 0}</td>
-                </tr>
-                <tr className="usage-total-row">
-                  <th scope="row">Igiteranyo</th>
-                  <td>~{usageActive?.total ?? 0}</td>
-                </tr>
-              </tbody>
-            </table>
-            <table className="usage-table">
-              <caption className="usage-caption">Ibiganiro byose</caption>
-              <tbody>
-                <tr>
-                  <th scope="row">Ibyoherejwe (injyana)</th>
-                  <td>~{usageTotal.inputTokens}</td>
-                </tr>
-                <tr>
-                  <th scope="row">Ibyakiriwe (insubizo)</th>
-                  <td>~{usageTotal.outputTokens}</td>
-                </tr>
-                <tr className="usage-total-row">
-                  <th scope="row">Igiteranyo</th>
-                  <td>~{usageTotal.total}</td>
-                </tr>
-              </tbody>
-            </table>
-            <a className="pricing-link" href={PRICING_URL} target="_blank" rel="noreferrer">
+            <UsageTable
+              caption="Iki kiganiro"
+              rows={[
+                ["Ibyoherejwe (injyana)", `~${usageActive?.inputTokens ?? 0}`],
+                ["Ibyakiriwe (insubizo)", `~${usageActive?.outputTokens ?? 0}`],
+                ["Igiteranyo", `~${usageActive?.total ?? 0}`],
+              ]}
+            />
+            <UsageTable
+              caption="Ibiganiro byose"
+              rows={[
+                ["Ibyoherejwe (injyana)", `~${usageTotal.inputTokens}`],
+                ["Ibyakiriwe (insubizo)", `~${usageTotal.outputTokens}`],
+                ["Igiteranyo", `~${usageTotal.total}`],
+              ]}
+            />
+            <a className="text-[0.8rem] text-brand underline-offset-[2px]" href={PRICING_URL} target="_blank" rel="noreferrer">
               Gereranya ibiciro bya OpenAI ({usageModel}) ↗
             </a>
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <button type="button" className="btn-ghost">
+              <button type="button" className={BTN_GHOST}>
                 Funga
               </button>
             </DialogClose>
