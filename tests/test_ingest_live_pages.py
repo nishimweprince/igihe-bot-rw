@@ -57,3 +57,25 @@ def test_start_page_resumes_without_refetching(tmp_path):
     assert len(posts) == 200
     assert (tmp_path / "page-2.json").exists()
     assert not (tmp_path / "page-1.json").exists()
+
+
+def test_fetch_posts_only_sends_window_params_when_set():
+    from igihe_assistant.ingestion.wordpress import WordPressClient
+
+    seen = []
+
+    class T:
+        def get(self, url, params):
+            seen.append(params)
+
+            class R:
+                items = []
+                headers = {}
+
+            return R()
+
+    c = WordPressClient(base_url="https://x", transport=T())
+    c.fetch_posts(1)
+    c.fetch_posts(2, orderby="modified", order="desc", modified_after="2026-08-01T00:00:00")
+    assert "modified_after" not in seen[0] and "after" not in seen[0]
+    assert seen[1]["modified_after"] == "2026-08-01T00:00:00" and seen[1]["orderby"] == "modified"

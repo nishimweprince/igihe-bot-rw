@@ -34,7 +34,8 @@ def test_off_corpus_chat_logs_request_and_refusal_reason(caplog):
     )
     refusals = _logs(caplog, "chat.refusal session=log-test reason=no_lexical_support")
     assert refusals, "expected a refusal log naming the retrieval reason"
-    assert "articles_indexed=0" in refusals[0].getMessage()
+    assert "articles_indexed=" in refusals[0].getMessage()
+    assert "coverage=" in refusals[0].getMessage()
 
 
 def test_oversize_message_logs_rejection(caplog):

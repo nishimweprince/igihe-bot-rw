@@ -19,6 +19,9 @@ COPY apps/api/ ./apps/api/
 
 EXPOSE 8000
 
-# With --network host, bind loopback only: nginx proxies 127.0.0.1:8000
-# and the container reaches Ollama at host localhost:11434.
+# Linux hosts have no MLX: mount the index and use GENERATOR=openai or
+# GENERATOR=ollama (Ollama reachable at host localhost:11434 with --network
+# host). Example:
+#   docker run --network host -v $PWD/data/index:/app/data/index \
+#     -e INDEX_PATH=data/index/full.sqlite -e GENERATOR=ollama -e OLLAMA_MODEL=... api
 CMD ["uvicorn", "apps.api.main:app", "--host", "127.0.0.1", "--port", "8000"]

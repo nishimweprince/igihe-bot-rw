@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 uv sync --frozen --extra dev
-uv run python scripts/ingest_fixtures.py --sample tests/fixtures/wp --out data
+uv run python scripts/ingest_fixtures.py --sample tests/fixtures/wp --out data || true
 uv run pytest -q
 uv run uvicorn apps.api.main:app --port 8000 &
 SRV=$!

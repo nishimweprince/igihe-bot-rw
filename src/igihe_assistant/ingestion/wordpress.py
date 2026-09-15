@@ -23,15 +23,31 @@ class WordPressClient:
     max_retries: int = 4
 
     def fetch_posts(
-        self, page: int, per_page: int = 100, orderby: str = "date", order: str = "asc"
+        self,
+        page: int,
+        per_page: int = 100,
+        orderby: str = "date",
+        order: str = "asc",
+        *,
+        after: str | None = None,
+        before: str | None = None,
+        modified_after: str | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, str]]:
-        params = {
+        params: dict[str, Any] = {
             "_fields": ALLOWED_FIELDS,
             "per_page": per_page,
             "page": page,
             "orderby": orderby,
             "order": order,
         }
+        # Date windows beat deep `page=N` offsets on a 200k-post archive.
+        for key, value in (
+            ("after", after),
+            ("before", before),
+            ("modified_after", modified_after),
+        ):
+            if value:
+                params[key] = value
         url = self.base_url.rstrip("/") + "/wp-json/wp/v2/posts"
         delay = 0.2
         last_exc: Exception | None = None

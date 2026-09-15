@@ -16,6 +16,10 @@ import {
   cancelTurn,
   chatRequestBody,
   completeIfStreaming,
+  filtersFor,
+  historyFor,
+  publishedAfterFor,
+  TIME_RANGES,
   conversationUsage,
   countTokens,
   createThreadState,
@@ -45,7 +49,7 @@ const SAMPLE_SSE = [
   'data: {"status": "searching"}',
   "",
   "event: token",
-  'data: {"text":"Amazi meza"}',
+  'data: {"text":"Amazi meza "}',
   "",
   "event: token",
   'data: {"text":"i Kigali [1]."}',
@@ -67,7 +71,7 @@ describe("parseSseBuffer", () => {
       events.map((e) => e.event),
       ["retrieval", "token", "token", "sources", "done"],
     );
-    assert.equal((events[1]?.data as { text: string }).text, "Amazi meza");
+    assert.equal((events[1]?.data as { text: string }).text, "Amazi meza ");
     assert.equal((events[2]?.data as { text: string }).text, "i Kigali [1].");
     const sources = events[3]?.data as Array<{ title: string; url: string }>;
     assert.equal(sources[0]?.title, "Amazi i Kigali");
@@ -223,6 +227,53 @@ describe("thread updates", () => {
       session_id: "demo-web",
       message: "Ni izihe nkuru ku mazi i Kigali?",
     });
+  });
+
+  it("adds history and filters only when present", () => {
+    const history = [{ role: "user" as const, content: "Q" }, { role: "assistant" as const, content: "A [1]." }];
+    const body = chatRequestBody("demo-web", "None se?", history, { published_after: "2026-01-01T00:00:00" });
+    assert.deepEqual(body.history, history);
+    assert.deepEqual(body.filters, { published_after: "2026-01-01T00:00:00" });
+    assert.equal(chatRequestBody("demo-web", "x", [], undefined).history, undefined);
+  });
+
+  it("historyFor skips the empty placeholder, errors and muted turns", () => {
+    let state = createThreadState("c1");
+    state = beginTurn(state, "Q1");
+    state = applySseEvent(state, { event: "token", data: { text: "A1 [1]." } });
+    state = applySseEvent(state, { event: "done", data: {} });
+    state = beginTurn(state, "Q2");
+    state = cancelTurn(state);
+    state = beginTurn(state, "Q3");
+    const history = historyFor(getActive(state));
+    assert.deepEqual(history, [
+      { role: "user", content: "Q1" },
+      { role: "assistant", content: "A1 [1]." },
+      { role: "user", content: "Q2" },
+      { role: "user", content: "Q3" },
+    ]);
+    assert.equal(historyFor(getActive(state), 2).length, 2);
+  });
+
+  it("replace event swaps the streamed text and recounts output tokens", () => {
+    let state = createThreadState("c1");
+    state = beginTurn(state, "Q");
+    state = applySseEvent(state, { event: "token", data: { text: "Al Hilal " } });
+    state = applySseEvent(state, { event: "token", data: { text: "yatsinze." } });
+    state = applySseEvent(state, { event: "replace", data: { text: "Mbabarira, nta bimenyetso.", reason: "no-citation" } });
+    const last = getActive(state).messages[1];
+    assert.equal(last?.content, "Mbabarira, nta bimenyetso.");
+    assert.equal(getActive(state).outputTokens, countTokens("Mbabarira, nta bimenyetso."));
+  });
+
+  it("time ranges map to published_after", () => {
+    const now = Date.UTC(2026, 8, 15, 12);
+    assert.equal(publishedAfterFor("all", now), undefined);
+    assert.equal(publishedAfterFor("7d", now)?.slice(0, 10), "2026-09-08");
+    assert.equal(publishedAfterFor("30d", now)?.slice(0, 10), "2026-08-16");
+    assert.equal(publishedAfterFor("year", now)?.slice(0, 4), "2026");
+    assert.deepEqual(filtersFor("all"), undefined);
+    assert.equal(TIME_RANGES.length, 4);
   });
 });
 
@@ -474,11 +525,12 @@ describe("token usage", () => {
     state = beginTurn(state, question);
     assert.equal(getActive(state).inputTokens, countTokens(question));
 
-    state = applySseEvent(state, { event: "token", data: { text: "Amazi meza" } });
+    state = applySseEvent(state, { event: "token", data: { text: "Amazi meza " } });
     state = applySseEvent(state, { event: "token", data: { text: "i Kigali [1]." } });
+    assert.equal(getActive(state).messages[1]?.content, "Amazi meza i Kigali [1].");
     assert.equal(
       getActive(state).outputTokens,
-      countTokens("Amazi meza") + countTokens("i Kigali [1]."),
+      countTokens("Amazi meza ") + countTokens("i Kigali [1]."),
     );
 
     state = applySseEvent(state, { event: "done", data: { model: "gpt-xyz", retrieval: "fake-hash" } });

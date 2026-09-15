@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 
 import apps.api.main as api
@@ -45,13 +44,18 @@ def test_realistic_unanswerable_with_shared_function_words_refuses():
     assert resp.status_code == 200
     low = resp.text.lower()
     assert "nta bimenyetso" in low
-    # Refusal must not answer, but still attaches disclaimed near matches.
+    # Refusal must not answer; nothing in the fixtures is close to Mars.
     assert "[1]" not in resp.text
-    assert '"wp_id"' in resp.text
+    assert "event: sources\ndata: []" in resp.text
+
+
+# Shares "mazi" with the water stories but nothing else: coverage too low
+# to answer, high enough to show the water stories as disclaimed near matches.
+NEAR_MISS = "Amazi ku mubumbe Mars?"
 
 
 def test_no_evidence_points_to_origin_and_disclaims_close_matches():
-    text, sources, _suggestions = api.answer_question("xyzzy blorpt quux nabi?", {})
+    text, sources, _suggestions = api.answer_question(NEAR_MISS, {})
     assert "—" not in text
     low = text.lower()
     assert "nta bimenyetso" in low
@@ -102,13 +106,11 @@ def test_no_close_match_streams_sendable_suggestions():
 
 
 def test_near_match_refusal_streams_headline_suggestions():
-    _text, sources, suggestions = api.answer_question("xyzzy blorpt quux nabi?", {})
+    _text, sources, suggestions = api.answer_question(NEAR_MISS, {})
     assert sources, "expected closest articles alongside the refusal"
     assert suggestions, "near-match refusal must carry follow-up prompts"
     assert sources[0]["title"] in suggestions
-    resp = client.post(
-        "/v1/chat", json={"session_id": "t-sugg-near", "message": "xyzzy blorpt quux nabi?"}
-    )
+    resp = client.post("/v1/chat", json={"session_id": "t-sugg-near", "message": NEAR_MISS})
     assert resp.status_code == 200
     assert "event: suggestions" in resp.text
     assert sources[0]["title"] in resp.text
@@ -141,8 +143,11 @@ def test_citationless_answer_replaced_with_refusal(monkeypatch):
     class NoCite:
         model_id = "nocite"
 
-        def generate(self, prompt, sources, max_tokens=400):
+        def generate(self, system, messages, max_tokens=400):
             return "Al Hilal yatsinze umukino."
+
+        def stream(self, system, messages, max_tokens=400):
+            yield "Al Hilal yatsinze umukino."
 
     monkeypatch.setattr(api, "generator", NoCite())
     text, sources, suggestions = api.answer_question("APR yatsinze Rayon gute?", {})
@@ -157,8 +162,21 @@ def test_feedback_recorded():
     assert resp.json() == {"status": "recorded"}
 
 
-@pytest.mark.skip(reason="requires live PostgreSQL + pgvector")
-def test_postgres_parity():
-    from igihe_assistant.retrieval.store import PostgresBackend
+def test_gibberish_has_no_near_matches_but_fallback_suggestions():
+    text, sources, suggestions = api.answer_question("xyzzy blorpt quux nabi?", {})
+    assert sources == [] and "nta bimenyetso" in text.lower()
+    assert "Mbwira inkuru ziheruka." in suggestions
 
-    PostgresBackend("postgresql://localhost/assistant").lexical("amazi", 5)
+
+def test_history_gives_a_one_word_follow_up_context():
+    history = [
+        {"role": "user", "content": "Ni izihe nkuru ku mazi i Kigali?"},
+        {"role": "assistant", "content": "Amazi meza yageze i Kigali [1]."},
+    ]
+    _text, sources, _ = api.answer_question("Icosora?", {}, history=history)
+    assert sources and {s["wp_id"] for s in sources} & {101, 109}
+
+
+def test_sources_endpoint_returns_article_or_404():
+    assert client.get("/v1/sources/107").json()["title"].startswith("Umusaruro")
+    assert client.get("/v1/sources/424242").status_code == 404

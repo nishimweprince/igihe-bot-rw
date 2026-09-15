@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol
 
-from ..prompting.builder import NO_EVIDENCE_RW
+from ..prompting.builder import NO_EVIDENCE_RW, Message, parse_evidence_block
 
 
 class Generator(Protocol):
     model_id: str
 
-    def generate(self, prompt: str, sources: list[dict], max_tokens: int) -> str: ...
+    def stream(self, system: str, messages: list[Message], max_tokens: int) -> Iterator[str]:
+        """Yield answer text pieces in order (tokens, words or sentences)."""
+
+    def generate(self, system: str, messages: list[Message], max_tokens: int) -> str:
+        """Full answer; equivalent to ''.join(stream(...))."""
 
 
 class FakeGenerator:
     model_id = "fake-gen-v1"
 
-    def generate(self, prompt: str, sources: list[dict], max_tokens: int = 400) -> str:
+    def generate(self, system: str, messages: list[Message], max_tokens: int = 400) -> str:
+        sources = parse_evidence_block(messages[-1]["content"]) if messages else []
         if not sources:
             return NO_EVIDENCE_RW
         lines = []
@@ -28,3 +34,11 @@ class FakeGenerator:
         # Crude token cap by words.
         words = text.split()
         return " ".join(words[:max_tokens])
+
+    def stream(self, system: str, messages: list[Message], max_tokens: int = 400) -> Iterator[str]:
+        # Word-sized pieces so the SSE bridge and incremental validation are
+        # exercised the same way a real model exercises them.
+        text = self.generate(system, messages, max_tokens)
+        words = text.split(" ")
+        for i, w in enumerate(words):
+            yield w if i == len(words) - 1 else w + " "

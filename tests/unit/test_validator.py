@@ -24,7 +24,7 @@ def test_rejects_evidence_echo():
 
 
 def test_rejects_system_instruction_echo():
-    text = "Subiza mu Kinyarwanda gusa. Koresha GUSA ibimenyetso biri hasi [1]."
+    text = "Koresha gusa ibimenyetso (inkuru) wahawe kandi usubize [1]."
     ok, reason = validate(text, SRC)
     assert not ok and reason == "evidence-echo"
 
@@ -37,14 +37,24 @@ def test_allows_ordinary_prose_mentioning_evidence():
 def test_echo_phrases_stay_in_sync_with_template():
     from igihe_assistant.prompting.builder import ECHO_PHRASES, build_messages
 
-    system, user = build_messages(
-        "Ikibazo cy'igerageza?",
-        [{"wp_id": 1, "title": "T", "published_at": "2024-01-01", "url": "u", "content": "C"}],
-    )
-    template = f"{system}\n{user}"
+    src = [{"wp_id": 1, "title": "T", "published_at": "2024-01-01", "url": "u", "content": "C"}]
+    system, messages = build_messages("Ikibazo cy'igerageza?", src)
+    _, browse = build_messages("Ikibazo cy'igerageza?", src, browse=True)
+    template = system + "\n".join(m["content"] for m in messages + browse)
     for phrase in ECHO_PHRASES:
-        if phrase.startswith("Ongera usubize"):
-            continue  # retry nudge appended at call time, not in template
         assert phrase in template, phrase
         ok, reason = validate(f"Igisubizo: {phrase} ikindi.", SRC)
         assert not ok and reason == "evidence-echo", phrase
+
+
+def test_rejects_question_echoed_with_a_citation():
+    ok, reason = validate(
+        "Ninde watwaye igikombe cy'isi cya 2030 [1].",
+        SRC,
+        "Ninde watwaye igikombe cy'isi cya 2030?",
+    )
+    assert not ok and reason == "question-echo"
+    ok, _ = validate(
+        "Ntawe uratwara igikombe cya 2030 [1].", SRC, "Ninde watwaye igikombe cya 2030?"
+    )
+    assert ok

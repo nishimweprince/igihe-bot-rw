@@ -1,87 +1,69 @@
-# Demo-day runbook (laptop, 8 GB RAM)
+# Demo runbook (laptop, 8 GB RAM)
 
-Audience: IGIHE staff demo. Everything runs from this repo; no corpus,
-snapshots, conversations, or secrets are committed (`data/` is gitignored).
+Audience: IGIHE staff demo. Everything runs from this repo; the corpus,
+index, models, conversations and secrets are gitignored.
 
-## 1. Start order (3 terminals)
+## 1. One-time preparation
 
 ```sh
-# Terminal 1 — model (one-time): ollama pull llama3.2:3b
-ollama serve  # skip if the Ollama app is already running
+uv sync --extra dev --extra mlx
+# archive already fetched under data/full/pages (202,756 posts)
+uv run python scripts/build_index.py --pages data/full/pages --out data/index/full.sqlite
+uv run python scripts/mlx_smoke.py        # expect a cited Kinyarwanda answer, ~1-2 s warm
+```
 
-# Terminal 2 — API on the live sample + real model (config comes from .env)
+## 2. Start order (2 terminals)
+
+```sh
+# Terminal 1 — API (config comes from .env; plain `uv run` won't load it)
 uv run --env-file .env uvicorn apps.api.main:app --port 8000
+# wait for "generator.warm" in the log (~15-30 s: weights + Metal warm-up)
 
-# Terminal 3 — chat UI
+# Terminal 2 — chat UI
 cd apps/demo-web && npm install && npm run dev
 ```
 
-Open `http://localhost:3000` in a browser. Health: `GET
-http://localhost:8000/health/ready` should report `"articles": 293`
-and `"ollama_model": "llama3.2:3b"`.
+Open `http://localhost:3000`. Health: `GET http://localhost:8000/health/ready`
+reports `"articles": 198633`, `"model": "mlx:gemma-4-e2b-it-mlx"`,
+`"retrieval": "trigram-fts5"`.
 
-Demo tuning (measured on this laptop, 2026-09-11): 3 evidence sources ×
-500 chars, lexical-candidate retrieval, one citation-nudge retry, and a
-validator that replaces echo/citation-less output with the approved
-refusal. Defaults in `.env.example` stay reference-faithful
-(hybrid RRF, 6 sources); the flags above are the demo profile.
+## 3. Guided demo script
 
-## 2. Guided demo script (verified live)
+1. Factual: `Perezida Kagame yavuze iki ku Rwanda na RDC?` — short cited
+   answer, tokens appear as they are generated, sources open the article.
+2. Latest: `Mbwira inkuru ziheruka` — browse mode, newest stories, cited.
+3. Code-switched: `football results this week` — English words map to
+   `umupira w'amaguru`, recent matches only.
+4. Follow-up: after (1), ask `None se muri Congo?` — the previous question's
+   terms travel with the follow-up.
+5. Time filter: pick `Iminsi 7` under the composer and ask again.
+6. Refusal: `Ninde watwaye igikombe cy'isi cya 2030?` — no evidence, exact
+   refusal, near matches shown as such, sendable suggestion chips.
 
-1. Factual, in-sample: `Abahinga bacibwa amande?` → short cited
-   answer `Abahinga bazacibwa amande [1].` plus a clickable source
-   (article 253425). This is the "it works" moment.
-2. Refusal: `Ni iki cyabaye ku mubumbe Mars ejo?` → approved
-   no-evidence wording, empty sources. Makes the trust point: no
-   archive support, no answer.
-3. Show a source link opening the original article.
+## 4. Measured (this laptop, 2026-09-15)
 
-## 3. Measured baselines (laptop, 2026-09-11)
+- Index: 198,633 articles / 219,152 chunks, 3.1 GB, built in 5 m 20 s.
+- Retrieval: p50 ~750 ms on headline-length queries, 300-600 ms on typical
+  questions; self-retrieval recall@1 0.93 / recall@10 0.95 (n=100).
+- Generation (Gemma 4 E2B 4-bit, warm): TTFT ~1.3 s, 45-55 tok/s, peak 3.2 GB.
+- Fixture retrieval eval: recall@10 1.0, refusal 1.0 (`evals/run_retrieval.py`).
 
-- Live sample: 300 fetched, 293 indexed, 7 quarantined, 331 chunks;
-  archive header `x-wp-total: 202756`.
-- Fixture mini-eval: Recall@5 1.0, Recall@10 1.0, MRR 0.905,
-  citation resolution 1.0, refusal 1.0.
-- Live-sample probe with the real 3B model (`scripts/probe_live.py`):
-  self-Recall@5 0.85, self-Recall@10 0.9, self-MRR 0.635,
-  citation resolution 0.0 on title-fragment queries (outputs refused
-  rather than hallucinated — safe direction), refusal accuracy 1.0
-  on off-corpus questions. Baseline only, not a gate.
-- Real-model latency (`scripts/latency_probe.py`, 120 output tokens):
-  concurrency 1 → median total 1.8 s; 2 → 2.2 s (max 3.9 s);
-  4 → 2.3 s (max 4.5 s). First-token equals total: the server
-  generates fully, then streams (streaming passthrough is follow-up work).
+## 5. Known limits (say these out loud)
 
-## 4. Sizing note (10k chats/day)
-
-10,000 msgs/day ≈ 0.12 msgs/s average. Peaks, not averages, matter:
-each 3B generation occupies the model worker for seconds, so sustained
-bursts above ~4 concurrent chats queue (bounded semaphore + localized
-busy message). If the pilot expects hotter peaks: shorter answers,
-stricter admission control, or a GPU host — that decision is the
-production capacity gate, not this demo.
-
-## 5. Known demo limits (say these out loud)
-
-- The 3B model is flaky: it sometimes echoes prompt text or drops
-  citations. The validator catches all observed shapes (unknown
-  citations, unindexed URLs, evidence/instruction echo, missing
-  citations, one retry) and replaces them with refusal — nothing
-  uncited streams as authoritative. Some good questions therefore
-  refuse; that is the guard working, not a crash.
-- Dense vectors are deterministic placeholders (`fake-hash-v1`); the
-  demo retrieval mode requires lexical support
-  (`RETRIEVAL_CANDIDATES=lexical`). Real multilingual embeddings are
-  the top follow-up (needs the editor-reviewed bake-off first).
-- Token streaming is buffered server-side; time-to-first-token equals
-  total time today.
+- E2B is a small model: it can misread a number or drop a citation. The
+  validator replaces uncited/echoed output with the refusal (`event:
+  replace`) — a refusal on a good question is the guard, not a crash.
+  `VALIDATION_RETRY=true` buys one buffered second attempt.
+- Retrieval is lexical: paraphrases with no shared substring miss. The
+  KI/EN lexicon and prefix stems cover the common cases; the gold set
+  will show the rest.
+- One generation at a time (MLX). Concurrent users see "Serivisi iruzuye".
 
 ## 6. Troubleshooting
 
-- `ollama_model: fake-gen-v1` in `/health/ready` → `OLLAMA_MODEL`
-  was unset when the API started; restart terminal 2 with it set.
-- Empty answers on every question → check `SAMPLE_DIR` points at
-  `data/live-sample/pages`; without it the API serves the 9 fixtures.
+- `"model": "fake-gen-v1"` → `GENERATOR`/`MLX_MODEL_PATH` unset or the
+  model dir missing (startup log `generator.config_fallback`).
+- `"index": "fixtures"` → `INDEX_PATH` unset or file missing.
+- Slow first answer → warm-up did not run (`WARMUP=false`) or the machine
+  is swapping (close browsers; the model needs ~3.5 GB free).
 - Port clashes → API `--port 8001` + `NEXT_PUBLIC_API_URL` for the UI.
-- Kill demo servers: `Ctrl-C` each terminal; nothing persists except
-  gitignored `data/`.

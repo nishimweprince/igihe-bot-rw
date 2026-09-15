@@ -138,8 +138,66 @@ export function newId(): string {
   return `t-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function chatRequestBody(sessionId: string, message: string): { session_id: string; message: string } {
-  return { session_id: sessionId, message };
+export type HistoryTurn = { role: Role; content: string };
+
+export type ChatFilters = { published_after?: string };
+
+export type ChatRequestBody = {
+  session_id: string;
+  message: string;
+  history?: HistoryTurn[];
+  filters?: ChatFilters;
+};
+
+/** Last `turns` completed messages of a conversation, as the server expects them. */
+export function historyFor(conv: Conversation | undefined, turns: number = HISTORY_TURNS): HistoryTurn[] {
+  if (!conv) return [];
+  const usable = conv.messages.filter((m) => m.content.trim() && !m.error && !m.muted);
+  return usable.slice(-turns).map((m) => ({ role: m.role, content: m.content }));
+}
+
+export function chatRequestBody(
+  sessionId: string,
+  message: string,
+  history: HistoryTurn[] = [],
+  filters?: ChatFilters,
+): ChatRequestBody {
+  const body: ChatRequestBody = { session_id: sessionId, message };
+  if (history.length) body.history = history;
+  if (filters && Object.keys(filters).length) body.filters = filters;
+  return body;
+}
+
+/** How many prior messages travel with each question (server keeps the last HISTORY_TURNS). */
+export const HISTORY_TURNS = 6;
+
+export type TimeRange = "all" | "7d" | "30d" | "year";
+
+export const TIME_RANGES: { value: TimeRange; label: string }[] = [
+  { value: "all", label: "Igihe cyose" },
+  { value: "7d", label: "Iminsi 7" },
+  { value: "30d", label: "Iminsi 30" },
+  { value: "year", label: "Uyu mwaka" },
+];
+
+/** ISO `published_after` for a range, or undefined for "all". */
+export function publishedAfterFor(range: TimeRange, now: number = Date.now()): string | undefined {
+  if (range === "all") return undefined;
+  const d = new Date(now);
+  if (range === "7d") d.setDate(d.getDate() - 7);
+  else if (range === "30d") d.setDate(d.getDate() - 30);
+  else {
+    d.setMonth(0, 1);
+    d.setHours(0, 0, 0, 0);
+  }
+  // Local wall-clock ISO (article dates are WordPress local time, not UTC).
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+export function filtersFor(range: TimeRange, now: number = Date.now()): ChatFilters | undefined {
+  const after = publishedAfterFor(range, now);
+  return after ? { published_after: after } : undefined;
 }
 
 export function isBusy(phase: ChatPhase): boolean {
@@ -150,10 +208,10 @@ export function canSend(phase: ChatPhase, text: string): boolean {
   return Boolean(text.trim()) && !isBusy(phase);
 }
 
+/** Streamed pieces carry their own whitespace (real tokens), so join is plain concat. */
 export function joinToken(existing: string, chunk: string): string {
   if (!chunk) return existing;
-  if (!existing) return chunk;
-  return `${existing} ${chunk}`;
+  return existing + chunk;
 }
 
 export function titleFromMessage(text: string): string {
@@ -231,6 +289,22 @@ export function appendToken(
     const messages = c.messages.slice();
     messages[messages.length - 1] = { ...last, content: joinToken(last.content, chunk) };
     return { ...c, messages, outputTokens: (c.outputTokens ?? 0) + countTokens(chunk) };
+  });
+}
+
+/** Server-side validation rejected the streamed text: swap it for the replacement. */
+export function replaceAnswer(
+  state: ThreadState,
+  text: string,
+  conversationId: string = state.activeId,
+): ThreadState {
+  return mapConversation(state, conversationId, (c) => {
+    const last = lastAssistant(c);
+    if (!last) return c;
+    const messages = c.messages.slice();
+    const previous = countTokens(last.content);
+    messages[messages.length - 1] = { ...last, content: text, muted: false };
+    return { ...c, messages, outputTokens: Math.max(0, (c.outputTokens ?? 0) - previous) + countTokens(text) };
   });
 }
 
@@ -398,6 +472,11 @@ export function applySseEvent(
     const chunk = String(rec.text ?? "");
     const next = appendToken({ ...state, phase: "streaming", status: STATUS.streaming }, chunk, conversationId);
     return { ...next, phase: "streaming", status: STATUS.streaming };
+  }
+  if (event === "replace") {
+    const rec = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const text = String(rec.text ?? "");
+    return text ? replaceAnswer(state, text, conversationId) : state;
   }
   if (event === "sources") {
     return attachSources(state, sourcesFromData(data), conversationId);

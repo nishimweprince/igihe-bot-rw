@@ -8,7 +8,12 @@ CITE = re.compile(r"\[(\d+)\]")
 ECHO_RECORD = re.compile(r"id=\d+")
 
 
-def validate(answer: str, sources: list[dict]) -> tuple[bool, str]:
+def _bare(text: str) -> str:
+    """Letters/digits only, lowercased: for comparing an answer to its question."""
+    return re.sub(r"[^a-z0-9]+", "", CITE.sub("", text.lower()))
+
+
+def validate(answer: str, sources: list[dict], question: str = "") -> tuple[bool, str]:
     """Return (ok, reason). Invalid citations must block authoritative send."""
     from ..prompting.builder import ECHO_PHRASES
 
@@ -18,6 +23,9 @@ def validate(answer: str, sources: list[dict]) -> tuple[bool, str]:
     if ECHO_RECORD.search(answer) or any(p.lower() in lowered for p in ECHO_PHRASES):
         # Model echoed the prompt template instead of answering.
         return False, "evidence-echo"
+    if question and _bare(answer) == _bare(question):
+        # Small models sometimes repeat the question with a citation glued on.
+        return False, "question-echo"
     nums = [int(n) for n in CITE.findall(answer)]
     if nums and max(nums) > len(sources):
         return False, "unknown-citation"

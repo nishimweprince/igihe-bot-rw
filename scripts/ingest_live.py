@@ -117,7 +117,7 @@ def main() -> None:
             ok += 1
         else:
             quarantined += 1
-    backend, by_id, articles = build_index(posts)
+    index_stats = build_index(posts).stats()
     report = {
         "run_id": result.run_id,
         "wp_total": wp_total,
@@ -126,8 +126,8 @@ def main() -> None:
         "failed": result.failed,
         "extract_ok": ok,
         "quarantined": quarantined,
-        "articles_indexed": len(articles),
-        "chunks_indexed": len(by_id),
+        "articles_indexed": index_stats["articles"],
+        "chunks_indexed": index_stats["chunks"],
     }
     (out / "index_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))

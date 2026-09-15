@@ -49,6 +49,10 @@ import {
   chatRequestBody,
   completeIfStreaming,
   createThreadState,
+  filtersFor,
+  historyFor,
+  TIME_RANGES,
+  type TimeRange,
   decodeShare,
   deleteConversation,
   failHttp,
@@ -421,6 +425,7 @@ export default function Home() {
   );
   const [linkCopied, setLinkCopied] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>("all");
   const threadRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -451,14 +456,14 @@ export default function Home() {
     stickToBottom.current = true;
   }, [state.activeId]);
 
-  async function streamReply(conversationId: string, message: string) {
+  async function streamReply(conversationId: string, message: string, history: ReturnType<typeof historyFor>) {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
       const resp = await fetch(`${API_URL}${CHAT_PATH}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(chatRequestBody(conversationId, message)),
+        body: JSON.stringify(chatRequestBody(conversationId, message, history, filtersFor(timeRange))),
         signal: controller.signal,
       });
       if (resp.status === 413 || resp.status === 429 || !resp.ok || !resp.body) {
@@ -497,9 +502,11 @@ export default function Home() {
     if (inFlight.current || !canSend(state.phase, message)) return false;
     inFlight.current = true;
     const conversationId = state.activeId;
+    // Prior turns travel with the question so one-word follow-ups keep their topic.
+    const history = historyFor(state.conversations.find((c) => c.id === conversationId));
     setState((s) => beginTurn(s, message));
     stickToBottom.current = true;
-    void streamReply(conversationId, message);
+    void streamReply(conversationId, message, history);
     return true;
   }
 
@@ -580,7 +587,22 @@ export default function Home() {
   );
 
   const footnote: ReactNode = (
-    <p className="mx-auto mt-[10px] w-[min(var(--content-w),100%)] text-center text-[0.72rem] leading-[1.4] text-ink-faint">Umufasha ashobora kwibeshya. Genzura amakuru mu nkuru za IGIHE.</p>
+    <div className="mx-auto mt-[10px] flex w-[min(var(--content-w),100%)] flex-wrap items-center justify-center gap-x-[14px] gap-y-[4px] text-[0.72rem] leading-[1.4] text-ink-faint">
+      <label className="inline-flex items-center gap-[6px]">
+        <span>Igihe:</span>
+        <select
+          aria-label="Hitamo igihe cy'inkuru"
+          className="rounded-full border border-line bg-canvas px-[10px] py-[3px] text-[0.72rem] text-ink focus:outline-none focus:border-line-strong"
+          value={timeRange}
+          onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+        >
+          {TIME_RANGES.map((r) => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
+        </select>
+      </label>
+      <span>Umufasha ashobora kwibeshya. Genzura amakuru mu nkuru za IGIHE.</span>
+    </div>
   );
 
   return (
