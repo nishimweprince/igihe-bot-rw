@@ -25,8 +25,13 @@ from igihe_assistant.generation.validator import CITE, validate
 from igihe_assistant.normalization.normalize import content_terms, normalize_search
 from igihe_assistant.observability import metrics
 from igihe_assistant.pipeline import build_index
-from igihe_assistant.prompting.builder import NO_EVIDENCE_RW, build_prompt
-from igihe_assistant.retrieval.hybrid import retrieve
+from igihe_assistant.prompting.builder import (
+    NO_CLOSE_MATCH_RW,
+    NO_CLOSE_MATCH_SUGGESTIONS,
+    NO_EVIDENCE_RW,
+    build_prompt,
+)
+from igihe_assistant.retrieval.hybrid import group_near_duplicates, retrieve
 
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "wp"
 
@@ -151,6 +156,51 @@ def _check_rate(session_id: str) -> None:
     _rate[session_id] = hits
 
 
+CLOSE_MATCH_N = 3
+
+
+def _closest_sources(message: str, filters: dict) -> list[dict]:
+    """Best-effort near matches for the no-exact-evidence path.
+
+    Lexical support decides whether we may answer; dense similarity (which
+    always ranks something) decides what to show alongside the refusal so the
+    reader still gets somewhere to look. Marked as approximate by the
+    refusal wording, never streamed as a grounded answer.
+    """
+    st = get_state()
+    backend, by_id = st["backend"], st["by_id"]
+    try:
+        qvec = embedder.embed(normalize_search(message))
+        ranked = [cid for cid, _ in backend.dense(qvec, 40, filters)]
+    except Exception:
+        return []
+    sources = []
+    for cid in group_near_duplicates(ranked, by_id)[:CLOSE_MATCH_N]:
+        ch = by_id[cid]
+        art = st["articles"][ch["wp_id"]]
+        sources.append(
+            {
+                "n": len(sources) + 1,
+                "wp_id": ch["wp_id"],
+                "title": art["title"],
+                "published_at": art["published_at"],
+                "url": art["url"],
+                "content": ch["content"],
+            }
+        )
+    if sources:
+        metrics.incr("requests.close_match")
+    return sources
+
+
+def _no_evidence(message: str, filters: dict) -> tuple[str, list[dict]]:
+    """Refusal with disclaimed near matches, or a suggested prompt if none."""
+    closest = _closest_sources(message, filters)
+    if closest:
+        return NO_EVIDENCE_RW, closest
+    return NO_CLOSE_MATCH_RW, []
+
+
 def answer_question(
     message: str,
     filters: dict,
@@ -169,9 +219,11 @@ def answer_question(
     )
     if article_id is None:
         terms = content_terms(message)
-        # No content-term lexical support in the archive: refuse rather than
-        # guess from dense similarity alone (dense always ranks something,
-        # and function words like "ni"/"ku" match almost every article).
+        # No content-term lexical support in the archive: no grounded answer.
+        # Dense similarity alone must not answer (dense always ranks
+        # something, and function words like "ni"/"ku" match almost every
+        # article), but its top ranks are still useful as explicitly
+        # disclaimed near matches shown under the refusal.
         lex_hits = backend.lexical(" ".join(terms), 5, filters) if terms else []
         if not terms or not lex_hits:
             metrics.incr("requests.refusal")
@@ -184,7 +236,7 @@ def answer_question(
                 len(st["articles"]),
                 _preview(message),
             )
-            return NO_EVIDENCE_RW, []
+            return _no_evidence(message, filters)
     if article_id is not None:
         cids = [cid for cid, ch in by_id.items() if ch["wp_id"] == article_id]
         ranked = cids[:6]
@@ -221,7 +273,7 @@ def answer_question(
             len(st["articles"]),
             _preview(message),
         )
-        return NO_EVIDENCE_RW, []
+        return _no_evidence(message, filters)
     # Evidence budget for the model: small local models lose the citation
     # instruction over long contexts. Citations still resolve to full
     # articles; only the prompt copy is trimmed. Tune via env for the demo.
@@ -394,6 +446,12 @@ async def chat(req: ChatRequest, request: Request):
             for s in sources
         ]
         yield f"event: sources\ndata: {json.dumps(pub)}\n\n"
+        if text == NO_CLOSE_MATCH_RW:
+            yield (
+                "event: suggestions\ndata: "
+                + json.dumps({"suggestions": NO_CLOSE_MATCH_SUGGESTIONS})
+                + "\n\n"
+            )
         yield (
             "event: done\ndata: "
             + json.dumps({"model": generator.model_id, "retrieval": embedder.model_id})

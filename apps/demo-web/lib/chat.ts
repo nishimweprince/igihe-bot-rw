@@ -15,6 +15,8 @@ export type Message = {
   role: Role;
   content: string;
   sources: Source[];
+  /** Sendable follow-up prompts attached by the server (e.g. after a refusal). */
+  suggestions?: string[];
   error?: boolean;
   /** Placeholder text (e.g. a cancelled reply) rendered in a quiet style. */
   muted?: boolean;
@@ -246,6 +248,20 @@ export function attachSources(
   });
 }
 
+export function attachSuggestions(
+  state: ThreadState,
+  suggestions: string[],
+  conversationId: string = state.activeId,
+): ThreadState {
+  return mapConversation(state, conversationId, (c) => {
+    const last = lastAssistant(c);
+    if (!last) return c;
+    const messages = c.messages.slice();
+    messages[messages.length - 1] = { ...last, suggestions };
+    return { ...c, messages };
+  });
+}
+
 export function startNewChat(state: ThreadState, id: string = newId()): ThreadState {
   const active = getActive(state);
   if (active && active.messages.length === 0) {
@@ -334,6 +350,19 @@ export function sourcesFromData(data: unknown): Source[] {
   return out;
 }
 
+export function suggestionsFromData(data: unknown): string[] {
+  const rec = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const raw = Array.isArray(rec.suggestions) ? rec.suggestions : [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const q = item.trim();
+    if (q && !out.includes(q)) out.push(q);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 export function parseSseBuffer(buffer: string): { events: ParsedEvent[]; remaining: string } {
   const events: ParsedEvent[] = [];
   const parts = buffer.split("\n\n");
@@ -372,6 +401,9 @@ export function applySseEvent(
   }
   if (event === "sources") {
     return attachSources(state, sourcesFromData(data), conversationId);
+  }
+  if (event === "suggestions") {
+    return attachSuggestions(state, suggestionsFromData(data), conversationId);
   }
   if (event === "done") {
     const rec = data && typeof data === "object" ? (data as Record<string, unknown>) : {};

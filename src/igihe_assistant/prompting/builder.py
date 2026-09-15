@@ -30,7 +30,19 @@ ECHO_PHRASES = (
 
 NO_EVIDENCE_RW = (
     "Mbabarira, nta bimenyetso bihagije mbona mu nkuru za IGIHE zo gusubiza "
-    "icyo kibazo. Ongera ubaze mu yandi magambo cyangwa ubaze ikindi."
+    "icyo kibazo. Reba inkuru z'umwimerere kuri "
+    "[IGIHE](https://old.igihe.com). "
+    "Nzikwereka hasi inkuru zegereye ikibazo cyawe, ariko si ibisubizo nyabyo."
+)
+
+#: Sendable follow-up prompts offered when nothing close was found.
+NO_CLOSE_MATCH_SUGGESTIONS = ["Mbwira inkuru ziheruka."]
+
+NO_CLOSE_MATCH_RW = (
+    "Mbabarira, nta bimenyetso bihagije mbona mu nkuru za IGIHE zo gusubiza "
+    "icyo kibazo. Reba inkuru z'umwimerere kuri "
+    "[IGIHE](https://old.igihe.com). "
+    f"Gerageza ikindi kibazo, urugero: {NO_CLOSE_MATCH_SUGGESTIONS[0]}"
 )
 
 

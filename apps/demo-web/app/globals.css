@@ -14,8 +14,8 @@
   --text: #0d0d0d;
   --text-2: #5d5d5d;
   --text-3: #8f8f8f;
-  --brand: #e4002b;
-  --brand-soft: #fde8ec;
+  --brand: #3092c0;
+  --brand-soft: #e4f2f9;
   --error: #b3261e;
   --error-soft: #fdecea;
   --btn: #0d0d0d;
@@ -43,8 +43,8 @@
     --text: #ececec;
     --text-2: #b4b4b4;
     --text-3: #8f8f8f;
-    --brand: #ff4d6d;
-    --brand-soft: #3a1a22;
+    --brand: #3092c0;
+    --brand-soft: #1d333e;
     --error: #ff8a80;
     --error-soft: #3a1f1d;
     --btn: #ffffff;
@@ -80,6 +80,11 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--brand);
+  color: #ffffff;
 }
 
 button,
@@ -758,6 +763,11 @@ button {
   color: var(--text);
 }
 
+.suggestions.in-turn {
+  justify-content: flex-start;
+  margin: 12px 0 0;
+}
+
 /* ---------- Thread ---------- */
 
 .thread {
@@ -826,6 +836,11 @@ button {
 
 .prose strong {
   font-weight: 600;
+}
+
+.prose a {
+  color: var(--brand);
+  text-underline-offset: 2px;
 }
 
 .turn.error .prose {

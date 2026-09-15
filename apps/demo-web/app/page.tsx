@@ -173,6 +173,12 @@ function Inlines({ inlines, sources }: { inlines: Inline[]; sources: Map<number,
             return <span key={i}>{inline.text}</span>;
           case "strong":
             return <strong key={i}>{inline.text}</strong>;
+          case "link":
+            return (
+              <a key={i} href={inline.url} target="_blank" rel="noreferrer">
+                {inline.text}
+              </a>
+            );
           case "br":
             return <br key={i} />;
           case "cite":
@@ -272,7 +278,17 @@ function CopyButton({ message }: { message: Message }) {
   );
 }
 
-function AssistantTurn({ message, streaming, status }: { message: Message; streaming: boolean; status: string }) {
+function AssistantTurn({
+  message,
+  streaming,
+  status,
+  onSuggest,
+}: {
+  message: Message;
+  streaming: boolean;
+  status: string;
+  onSuggest: (question: string) => void;
+}) {
   const waiting = streaming && !message.content;
   const tone = message.error ? " error" : message.muted ? " muted" : "";
   return (
@@ -283,6 +299,17 @@ function AssistantTurn({ message, streaming, status }: { message: Message; strea
         <Prose text={message.content} sources={message.sources} streaming={streaming} />
       )}
       {message.sources.length > 0 ? <Sources sources={message.sources} /> : null}
+      {!streaming && message.suggestions?.length ? (
+        <ul className="suggestions in-turn" aria-label="Ingero z'ibibazo">
+          {message.suggestions.map((q) => (
+            <li key={q}>
+              <button type="button" className="suggestion" onClick={() => onSuggest(q)}>
+                {q}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {!streaming && message.content && !message.error && !message.muted ? (
         <div className="turn-actions">
           <CopyButton message={message} />
@@ -617,7 +644,7 @@ export default function Home() {
                       <div className="user-bubble">{m.content}</div>
                     </article>
                   ) : (
-                    <AssistantTurn key={m.id} message={m} streaming={streamingThis} status={state.status} />
+                    <AssistantTurn key={m.id} message={m} streaming={streamingThis} status={state.status} onSuggest={send} />
                   );
                 })}
               </div>

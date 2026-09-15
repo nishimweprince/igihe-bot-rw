@@ -4,13 +4,15 @@
  * Answers are short Kinyarwanda sentences that end in `[n]` citations
  * (see src/igihe_assistant/prompting/builder.py). We render those as chips
  * linked to the matching source, and support just enough structure
- * (paragraphs, bullet/numbered lists, **bold**) to keep answers readable
+ * (paragraphs, bullet/numbered lists, **bold**, [label](https://...) links)
+ * to keep answers readable
  * without pulling in a markdown dependency.
  */
 
 export type Inline =
   | { kind: "text"; text: string }
   | { kind: "strong"; text: string }
+  | { kind: "link"; text: string; url: string }
   | { kind: "cite"; n: number }
   | { kind: "br" };
 
@@ -19,7 +21,8 @@ export type Block =
   | { kind: "ul"; items: Inline[][] }
   | { kind: "ol"; items: Inline[][] };
 
-const INLINE_RE = /(\*\*[^*\n]+\*\*)|(\[\d+(?:\s*,\s*\d+)*\])/g;
+const INLINE_RE = /(\*\*[^*\n]+\*\*)|(\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))|(\[\d+(?:\s*,\s*\d+)*\])/g;
+const LINK_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/;
 const BULLET_RE = /^\s*[-*•]\s+(.*)$/;
 const NUMBERED_RE = /^\s*\d+[.)]\s+(.*)$/;
 
@@ -43,6 +46,11 @@ export function parseInline(line: string): Inline[] {
     if (match[1]) {
       pushText(out, line.slice(cursor, start));
       out.push({ kind: "strong", text: raw.slice(2, -2) });
+    } else if (match[2]) {
+      pushText(out, line.slice(cursor, start));
+      const inner = LINK_RE.exec(raw);
+      if (inner) out.push({ kind: "link", text: inner[1], url: inner[2] });
+      else pushText(out, raw);
     } else {
       // A chip carries its own spacing, so drop the space the model put
       // before "[1]" to keep punctuation tight: "amande [1]." -> "amande[1]."
@@ -105,7 +113,10 @@ export function citedNumbers(text: string): number[] {
 
 /** Plain-text copy of an answer with citation markers preserved. */
 export function plainText(text: string): string {
-  return text.replace(/\*\*([^*\n]+)\*\*/g, "$1").trim();
+  return text
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .trim();
 }
 
 const NAMED_ENTITIES: Record<string, string> = {
